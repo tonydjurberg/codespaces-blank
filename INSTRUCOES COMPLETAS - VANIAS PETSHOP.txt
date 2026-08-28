@@ -1,0 +1,119 @@
+VANIA'S PETSHOP CRM
+INSTRUCOES COMPLETAS
+====================
+
+Este sistema ajuda a Vania's Petshop a cuidar dos clientes, dos pets, das mensagens,
+dos precos e dos horarios de banho e tosa.
+
+1. COMO ABRIR O SISTEMA
+-----------------------
+No Windows:
+
+1) Encontre o arquivo vanias-petshop-crm.zip na pasta Downloads.
+2) Clique no arquivo com o botao direito do mouse.
+3) Clique em "Extrair tudo...".
+4) Clique em "Extrair".
+5) Abra a pasta nova.
+6) Clique duas vezes em index.html.
+7) O sistema vai abrir no Chrome ou no Edge.
+
+Nao precisa instalar programa. Nao apague a pasta depois de abrir.
+
+2. O QUE CADA PARTE FAZ
+------------------------
+CONVERSAS
+Mostra as conversas com os tutores. Use a caixa de pesquisa para encontrar uma pessoa.
+Clique em uma conversa para responder. Digite a mensagem e clique na seta de envio.
+
+CLIENTES
+Mostra os tutores e seus pets. Use "Novo cliente" para cadastrar uma pessoa, seu pet
+e o telefone com DDD.
+
+AGENDA
+Mostra os horarios de banho e tosa. Clique em "Novo agendamento" e preencha:
+nome do tutor, nome do pet, dia, horario, servico e observacoes.
+
+PEDIDOS E PRECOS
+Mostra os servicos e seus precos. Use "Adicionar servico" para cadastrar um novo servico
+e informar o preco.
+
+MENSAGENS EM MASSA
+Prepara uma mensagem para varios clientes. Escolha o grupo, escreva a mensagem e clique
+em "Preparar envio". Para enviar de verdade pelo WhatsApp, veja a parte 5.
+
+TELEFONE
+O botao de telefone abre uma ligacao no computador. Para funcionar, o computador precisa
+ter um programa de chamadas ou um telefone conectado.
+
+3. ONDE OS DADOS FICAM
+----------------------
+Os clientes, mensagens e agendamentos ficam salvos neste navegador do computador.
+Use sempre o mesmo computador e o mesmo navegador.
+
+Se apagar os dados do navegador, os dados do sistema podem desaparecer.
+Para uma empresa com varios computadores e varias pessoas, sera necessario um servidor
+com banco de dados. Veja a parte 6.
+
+4. COMO CRIAR O NUMERO DO WHATSAPP BUSINESS
+--------------------------------------------
+A conta e criada no site da Meta, empresa dona do WhatsApp.
+
+1) Entre em business.facebook.com.
+2) Crie uma conta da empresa ou entre com uma conta existente.
+3) Abra o Meta Business Suite.
+4) Confirme os dados da empresa, se a Meta pedir.
+5) Abra Configuracoes da empresa.
+6) Entre em Contas > Contas do WhatsApp.
+7) Crie ou escolha a conta da Vania's Petshop.
+8) Abra a configuracao da API.
+9) Adicione o numero de telefone da loja.
+10) Confirme o numero com o codigo recebido por SMS ou ligacao.
+
+IMPORTANTE: o numero usado na API nao pode estar conectado ao aplicativo WhatsApp comum.
+Ele deve ser um numero separado para o WhatsApp Business Platform.
+
+5. COMO PEGAR OS DADOS DA API
+-----------------------------
+Na configuracao da API da Meta, um desenvolvedor deve criar um usuario do sistema e um
+token de acesso permanente.
+
+Os dados necessarios sao:
+- ID da conta do WhatsApp;
+- ID do numero de telefone;
+- numero de telefone da loja;
+- token de acesso permanente;
+- endereco do servidor para receber mensagens.
+
+Nunca coloque o token neste arquivo, no index.html ou em uma mensagem publica.
+O token deve ficar escondido em um servidor seguro.
+
+6. COMO LIGAR O SISTEMA AO WHATSAPP DE VERDADE
+-----------------------------------------------
+Esta parte precisa ser feita por um desenvolvedor:
+
+1) Criar um servidor seguro.
+2) Criar um banco de dados para clientes, pets, mensagens, pedidos e agenda.
+3) Colocar os dados da API em variaveis secretas no servidor.
+4) Criar um webhook para receber mensagens do WhatsApp.
+5) Fazer o botao de enviar mensagem chamar a API da Meta.
+6) Fazer o botao de mensagens em massa usar modelos aprovados pela Meta.
+7) Criar usuarios e senhas para a equipe.
+8) Fazer backup automatico do banco de dados.
+
+A Meta exige modelos aprovados para iniciar conversas com clientes. No Gerenciador do
+WhatsApp, abra Modelos de mensagem, crie um modelo e envie para aprovacao.
+
+7. O QUE ESTA PRONTO AGORA
+--------------------------
+O arquivo ZIP e uma demonstracao funcional para mostrar ao cliente. Ele permite testar
+a tela, pesquisar conversas, enviar mensagens de teste, cadastrar clientes, cadastrar
+precos e criar agendamentos.
+
+Para funcionar como sistema oficial da loja, com mensagens reais, varios computadores,
+login e dados na nuvem, ainda precisa da conexao oficial descrita nas partes 5 e 6.
+
+SUPORTE
+-------
+Se uma etapa da Meta pedir documentos, senha ou confirmacao da empresa, o dono da loja
+deve fazer essa etapa. O token e as senhas devem ser entregues somente ao desenvolvedor
+responsavel pela instalacao.

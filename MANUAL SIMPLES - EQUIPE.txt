@@ -1,0 +1,104 @@
+MANUAL SIMPLES DA EQUIPE
+VANIA'S PETSHOP
+======================
+
+Este manual explica como usar o sistema no dia a dia.
+
+PARTE 1 - ABRIR O SISTEMA
+-------------------------
+1. Abra a pasta do sistema.
+2. Clique duas vezes em "ABRIR SISTEMA.html".
+3. Espere a tela da Vania's Petshop aparecer.
+
+Se nao abrir, clique duas vezes em "index.html".
+
+PARTE 2 - RESPONDER UM CLIENTE
+------------------------------
+1. Clique em "Conversas" no menu da esquerda.
+2. Clique no nome do cliente.
+3. Leia a mensagem.
+4. Escreva a resposta na caixa no final da conversa.
+5. Clique na seta para enviar.
+
+Tambem pode apertar a tecla Enter para enviar.
+
+DICA: Antes de enviar, confira se esta falando com o tutor certo.
+
+PARTE 3 - PROCURAR UM CLIENTE
+-----------------------------
+1. Entre em "Clientes".
+2. Clique na caixa de pesquisa.
+3. Digite o nome do tutor ou do pet.
+4. Clique no botao "Novo cliente" para cadastrar uma pessoa nova.
+5. Escreva o nome do tutor, o nome do pet e o telefone com DDD.
+
+PARTE 4 - MARCAR BANHO OU TOSA
+------------------------------
+1. Clique em "Agenda".
+2. Clique em "Novo agendamento".
+3. Escreva o nome do tutor.
+4. Escreva o nome do pet.
+5. Escolha o dia.
+6. Escolha o horario.
+7. Escolha o servico.
+8. Escreva observacoes importantes.
+9. Clique em "Salvar agendamento".
+
+Exemplos de observacoes:
+- O pet tem medo de secador.
+- Usar shampoo para pele sensivel.
+- Tutor vai buscar as 16 horas.
+
+PARTE 5 - VER OS PRECOS
+-----------------------
+1. Clique em "Pedidos e precos".
+2. Veja o valor de cada servico.
+3. Clique em "Adicionar servico" para criar um novo servico.
+4. Escreva o nome e o preco.
+
+PARTE 6 - MANDAR UMA MENSAGEM PARA VARIOS CLIENTES
+--------------------------------------------------
+1. Clique em "Mensagens em massa".
+2. Escolha para quem a mensagem vai ser enviada.
+3. Escreva uma mensagem curta e clara.
+4. Clique em "Preparar envio".
+
+ATENCAO: nesta versao, o botao prepara a mensagem para teste. O envio real precisa da
+API oficial do WhatsApp Business e de modelos de mensagem aprovados pela Meta.
+
+PARTE 7 - LIGAR PARA UM CLIENTE
+-------------------------------
+1. Abra a conversa ou a lista de clientes.
+2. Clique no simbolo de telefone.
+3. O computador vai tentar abrir o programa de ligacao.
+
+Se nada acontecer, o computador precisa de um programa de telefone ou de um celular
+conectado para fazer a chamada.
+
+PARTE 8 - COMO NAO PERDER OS DADOS
+----------------------------------
+- Use sempre o mesmo navegador.
+- Nao limpe o historico e os dados do navegador.
+- Nao apague a pasta do sistema.
+- Faca uma copia da pasta de tempos em tempos.
+
+PARTE 9 - QUANDO PEDIR AJUDA
+----------------------------
+Peça ajuda a um responsavel se:
+- o sistema nao abrir;
+- uma mensagem nao aparecer;
+- o navegador mostrar uma tela em branco;
+- o telefone nao fizer a ligacao;
+- for necessario conectar o WhatsApp de verdade.
+
+O token da API, as senhas e os dados da Meta devem ser cuidados pelo responsavel ou
+por um desenvolvedor. Nao compartilhe esses dados com outras pessoas.
+
+RESUMO RAPIDO
+-------------
+Conversas = responder tutores.
+Clientes = cadastrar pessoas e pets.
+Agenda = marcar banho e tosa.
+Pedidos e precos = consultar valores.
+Mensagens em massa = preparar campanhas.
+Telefone = ligar para o tutor.

@@ -1,0 +1,37 @@
+VANIA'S PETSHOP CRM - COMECE AQUI
+===================================
+
+Este arquivo explica como abrir o programa.
+
+NO COMPUTADOR WINDOWS
+---------------------
+1. Encontre o arquivo vanias-petshop-crm.zip na pasta Downloads.
+2. Clique nele com o botao direito do mouse.
+3. Escolha "Extrair tudo...".
+4. Clique em "Extrair".
+5. Abra a nova pasta que apareceu.
+6. Clique duas vezes no arquivo index.html.
+7. O programa vai abrir no Chrome ou Edge.
+
+PRONTO. NAO PRECISA INSTALAR NADA.
+
+COMO USAR
+----------
+- Conversas: leia e responda mensagens de clientes.
+- Clientes: veja os tutores e seus pets.
+- Agenda: marque banho, tosa e outros servicos.
+- Pedidos e precos: consulte os valores dos servicos.
+- Mensagens em massa: prepare uma mensagem para varios clientes.
+- O botao de telefone pode abrir uma ligacao no computador.
+
+IMPORTANTE
+----------
+Este arquivo e uma demonstracao que funciona no proprio computador.
+Os novos clientes, mensagens e agendamentos ficam salvos neste navegador.
+Nao apague a pasta do programa e use sempre o mesmo navegador para ver os dados.
+
+WHATSAPP DE VERDADE
+-------------------
+Para enviar mensagens reais pelo WhatsApp, a Vania's Petshop precisa de uma conta
+WhatsApp Business, uma conta Meta e uma configuracao de servidor. Isso e uma etapa
+separada e deve ser feita por um tecnico ou pela empresa que vai instalar o sistema.

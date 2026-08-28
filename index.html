@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f6f3ee" />
+  <title>Vania's Petshop | WhatsApp CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">VP</div><div><strong>Vania's</strong><span>petshop CRM</span></div></div>
+      <div class="workspace-switcher"><div class="workspace-avatar">V</div><div><small>Empresa</small><strong>Vania's Petshop</strong></div><i data-lucide="chevrons-up-down"></i></div>
+      <nav class="main-nav" aria-label="Main navigation">
+        <a class="nav-item active" href="#inbox"><i data-lucide="message-circle"></i><span>Conversas</span><b>12</b></a>
+        <a class="nav-item" href="#contacts"><i data-lucide="contact-round"></i><span>Clientes</span></a>
+        <a class="nav-item" href="#broadcasts"><i data-lucide="send"></i><span>Mensagens em massa</span></a>
+        <a class="nav-item" href="#automation"><i data-lucide="zap"></i><span>Automação</span><em>Novo</em></a>
+      </nav>
+      <div class="nav-section-label">Gerenciar</div>
+      <nav class="main-nav">
+        <a class="nav-item" href="#orders"><i data-lucide="shopping-bag"></i><span>Pedidos e preços</span></a>
+        <a class="nav-item" href="#schedule"><i data-lucide="calendar-days"></i><span>Agenda</span><b>4</b></a>
+        <a class="nav-item" href="#analytics"><i data-lucide="chart-no-axes-combined"></i><span>Relatórios</span></a>
+      </nav>
+      <div class="sidebar-bottom"><div class="team-title"><span>Team inbox</span><button class="icon-button" aria-label="Add team member"><i data-lucide="plus"></i></button></div><div class="team-member"><span class="status-dot"></span><div class="mini-avatar coral">V</div><span>Vania</span><small>you</small></div><div class="team-member"><span class="status-dot"></span><div class="mini-avatar mint">M</div><span>Marcelo</span></div><div class="team-member"><span class="status-away"></span><div class="mini-avatar yellow">J</div><span>Julia</span></div></div>
+      <div class="sidebar-footer"><div class="mini-avatar brand-avatar">V</div><div><strong>Vania Costa</strong><small>Conta proprietaria</small></div><i data-lucide="more-horizontal"></i></div>
+    </aside>
+
+    <main class="main-content" id="inbox">
+      <header class="topbar"><div><p class="eyebrow">Friday, August 28, 2026</p><h1>Good morning, Vania <span>✦</span></h1></div><div class="top-actions"><button class="icon-button desktop-search" aria-label="Search"><i data-lucide="search"></i></button><button class="notification-button" aria-label="Notifications"><i data-lucide="bell"></i><span></span></button><button class="new-conversation"><i data-lucide="plus"></i> New conversation</button></div></header>
+      <section class="stats-row"><div class="stat-card"><div class="stat-icon peach"><i data-lucide="inbox"></i></div><div><span>Open conversations</span><strong>24</strong><small class="positive">↑ 8.2% <label>vs last week</label></small></div></div><div class="stat-card"><div class="stat-icon green"><i data-lucide="clock-3"></i></div><div><span>Avg. response time</span><strong>4m 12s</strong><small class="positive">↓ 18% <label>vs last week</label></small></div></div><div class="stat-card"><div class="stat-icon lemon"><i data-lucide="heart-handshake"></i></div><div><span>Resolved today</span><strong>38</strong><small class="positive">↑ 12.4% <label>vs yesterday</label></small></div></div><div class="stat-card"><div class="stat-icon lavender"><i data-lucide="shopping-cart"></i></div><div><span>Sales from chat</span><strong>$1,248</strong><small class="positive">↑ 24.7% <label>vs last week</label></small></div></div></section>
+
+      <section class="workspace-grid" id="inbox-view">
+        <div class="inbox-panel panel">
+          <div class="panel-heading"><div><h2>Conversas <span class="count-pill">12</span></h2><p>Fique perto de cada tutor.</p></div><button class="icon-button" aria-label="Filtros"><i data-lucide="list-filter"></i></button></div>
+          <div class="inbox-tabs"><button class="tab active" data-filter="all">Todas <span>12</span></button><button class="tab" data-filter="unread">Nao lidas <span>5</span></button><button class="tab" data-filter="assigned">Atribuidas <span>7</span></button></div>
+          <div class="search-field"><i data-lucide="search"></i><input id="conversation-search" type="search" placeholder="Pesquisar conversas" /></div>
+          <div class="conversation-list" id="conversation-list"></div>
+        </div>
+
+        <div class="chat-panel panel">
+          <div class="chat-header"><div class="customer-avatar large coral">MS</div><div class="chat-title"><h2 id="chat-name">Marina Silva <span class="verified"><i data-lucide="badge-check"></i></span></h2><p id="chat-subtitle">Online · Last seen just now</p></div><div class="chat-actions"><button class="icon-button" id="call-customer" aria-label="Ligar para cliente"><i data-lucide="phone"></i></button><button class="icon-button" aria-label="Mais ações"><i data-lucide="more-horizontal"></i></button></div></div>
+          <div class="chat-body" id="chat-body"><div class="date-divider"><span>Today</span></div><div class="message received"><p>Hi Vania! Do you have the salmon treats that Luna loves? 🐾</p><time>10:42 AM</time></div><div class="message sent"><p>Hi Marina! We do, they just arrived this morning. I can put two bags aside for you. 😊</p><time>10:44 AM <i data-lucide="check-check"></i></time></div><div class="message received"><p>That would be perfect! And could you add one of those little rope toys too?</p><time>10:45 AM</time></div><div class="message sent"><p>Absolutely. I’ll have everything ready at the counter under Luna’s name. See you soon!</p><time>10:46 AM <i data-lucide="check-check"></i></time></div><div class="message-note"><i data-lucide="sparkles"></i><span>Vania added a note: <strong>Pickup today · salmon treats x2 + rope toy</strong></span></div></div>
+          <div class="composer"><div class="quick-replies"><button>Ola! Como podemos ajudar? <i data-lucide="corner-down-left"></i></button><button>Pedido pronto para retirada <i data-lucide="corner-down-left"></i></button></div><div class="composer-row"><button class="icon-button" aria-label="Anexar arquivo"><i data-lucide="paperclip"></i></button><input id="message-input" type="text" placeholder="Escreva uma mensagem..." /><button class="emoji-button" aria-label="Adicionar emoji">☺</button><button class="send-button" id="send-message" aria-label="Enviar mensagem"><i data-lucide="send"></i></button></div></div>
+        </div>
+
+        <aside class="profile-panel panel"><div class="profile-top"><span>Customer profile</span><button class="icon-button" aria-label="Profile actions"><i data-lucide="more-horizontal"></i></button></div><div class="profile-identity"><div class="customer-avatar xlarge coral">MS</div><h2 id="profile-name">Marina Silva</h2><p>Customer since Mar 2024</p><div class="profile-tags"><span class="tag vip">VIP customer</span><span class="tag">Dog parent</span></div></div><div class="profile-details"><div class="detail-row"><i data-lucide="phone"></i><div><small>Phone number</small><strong>+55 11 99824-1042</strong></div></div><div class="detail-row"><i data-lucide="mail"></i><div><small>Email</small><strong>marina.silva@email.com</strong></div></div><div class="detail-row"><i data-lucide="map-pin"></i><div><small>Preferred store</small><strong>Vila Madalena</strong></div></div></div><div class="profile-section"><div class="section-heading"><h3>Pet profiles <span>2</span></h3><button class="text-button">Edit</button></div><div class="pet-item"><div class="pet-icon">🐕</div><div><strong>Luna</strong><span>Golden Retriever · 4 yrs</span></div><i data-lucide="chevron-right"></i></div><div class="pet-item"><div class="pet-icon cat">🐈</div><div><strong>Nino</strong><span>Mixed breed · 2 yrs</span></div><i data-lucide="chevron-right"></i></div></div><div class="profile-section"><div class="section-heading"><h3>Tags</h3><button class="text-button">+ Add</button></div><div class="all-tags"><span class="tag">Frequent buyer</span><span class="tag">Treats</span><span class="tag">Birthday club</span></div></div><div class="profile-section last"><div class="section-heading"><h3>Last order</h3><button class="text-button">View all</button></div><div class="last-order"><div><strong>#VP-10482</strong><span>Aug 12, 2026 · $86.40</span></div><span class="order-status">Delivered</span></div></div></aside>
+      </section>
+      <section class="schedule-view" id="schedule">
+        <div class="schedule-heading"><div><p class="eyebrow">Agendamentos</p><h2>Todo pet bem cuidado.</h2><p>Marque banho e tosa com pet, tutor e observacoes no mesmo lugar.</p></div><button class="new-conversation" id="new-appointment"><i data-lucide="plus"></i> Novo agendamento</button></div>
+        <div class="schedule-toolbar"><div class="week-switcher"><button class="icon-button" aria-label="Semana anterior"><i data-lucide="chevron-left"></i></button><strong>24 – 30 de agosto de 2026</strong><button class="icon-button" aria-label="Proxima semana"><i data-lucide="chevron-right"></i></button><button class="today-button">Hoje</button></div><div class="schedule-filters"><button class="filter-button active">Todos os servicos <i data-lucide="chevron-down"></i></button><button class="filter-button">Todos os profissionais <i data-lucide="chevron-down"></i></button></div></div>
+        <div class="calendar-panel panel"><div class="calendar-grid" id="calendar-grid"></div></div>
+        <div class="upcoming-row"><div><h3>Proximos agendamentos</h3><p>Os proximos pets que vao receber carinho.</p></div><button class="text-button">Ver todos <i data-lucide="arrow-up-right"></i></button></div>
+        <div class="appointment-cards" id="appointment-cards"></div>
+      </section>
+      <section class="management-view" id="contacts-view"><div class="schedule-heading"><div><p class="eyebrow">Clientes</p><h2>Todos os tutores.</h2><p>Cadastre contatos e mantenha os pets sempre por perto.</p></div><button class="new-conversation" id="add-customer"><i data-lucide="user-plus"></i> Novo cliente</button></div><div class="panel management-panel"><div class="panel-heading"><div><h2>Base de clientes</h2><p>6 clientes cadastrados</p></div><div class="search-field compact"><i data-lucide="search"></i><input id="customer-search" placeholder="Pesquisar clientes" /></div></div><div id="customer-list" class="customer-list"></div></div></section>
+      <section class="management-view" id="orders-view"><div class="schedule-heading"><div><p class="eyebrow">Catálogo</p><h2>Preços dos serviços.</h2><p>Tenha valores prontos para responder pelo WhatsApp.</p></div><button class="new-conversation" id="add-price"><i data-lucide="plus"></i> Adicionar serviço</button></div><div class="price-grid" id="price-list"></div></section>
+      <section class="management-view" id="broadcasts-view"><div class="schedule-heading"><div><p class="eyebrow">Campanhas</p><h2>Fale com vários tutores.</h2><p>Envie novidades e lembretes para clientes selecionados.</p></div></div><div class="panel broadcast-panel"><form id="broadcast-form"><label>Destinatários<select><option>Todos os clientes (6)</option><option>Tutores de cães</option><option>Clientes VIP</option></select></label><label>Mensagem<textarea required rows="5" placeholder="Ex.: O banho da semana está com 15% de desconto. 🐾"></textarea></label><button class="save-appointment" type="submit"><i data-lucide="send"></i> Preparar envio</button></form></div></section>
+    </main>
+  </div>
+  <div class="modal-backdrop" id="appointment-modal" aria-hidden="true"><div class="appointment-modal"><div class="modal-header"><div><p class="eyebrow">Novo agendamento</p><h2>Marcar banho e tosa</h2></div><button class="icon-button" id="close-modal" aria-label="Fechar"><i data-lucide="x"></i></button></div><form id="appointment-form"><label>Nome do tutor<input name="owner" required placeholder="Ex.: Marina Silva" /></label><label>Nome do pet<input name="pet" required placeholder="Ex.: Luna" /></label><div class="form-split"><label>Data<input name="date" type="date" required value="2026-08-28" /></label><label>Horario<select name="time"><option>09:00</option><option>11:30</option><option>14:00</option><option>16:30</option></select></label></div><label>Servico<select name="service"><option>Banho e tosa completo</option><option>Banho e secagem</option><option>Corte de unhas</option><option>Desembolo de pelos</option></select></label><label>Observacoes<textarea name="notes" rows="3" placeholder="Algo que o profissional precisa saber?"></textarea></label><button class="save-appointment" type="submit"><i data-lucide="calendar-plus"></i> Salvar agendamento</button></form></div></div>
+  <div class="toast" id="toast"><i data-lucide="check-circle-2"></i><span>Message sent</span></div>
+  <script src="app.js"></script>
+</body>
+</html>
