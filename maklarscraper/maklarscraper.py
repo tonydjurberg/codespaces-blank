@@ -3,6 +3,7 @@ import csv
 import re
 import sys
 import time
+from datetime import date
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -27,8 +28,11 @@ SKANE_MUNICIPALITIES = [
 ]
 
 FIELDS = [
-    "name", "registration_date", "registration_type", "company",
-    "company_address", "offices", "search_area", "source_url",
+    "name", "title", "company_role", "mobile", "direct_phone", "switchboard",
+    "personal_email", "general_email", "primary_office", "other_offices",
+    "postal_code", "city", "profile_url", "company_website", "registration_date",
+    "registration_type", "company", "company_address", "search_area", "source_url",
+    "verification_status", "date_fetched",
 ]
 
 def clean(value):
@@ -240,15 +244,32 @@ def parse_detail(driver, url, search_area):
 
     # The result page can expose the short display name as a link; the legal
     # full name above is the authoritative name field for the CSV.
+    office_values = [clean(x) for x in offices if clean(x)]
+    primary_office = office_values[0] if office_values else company_address
     return {
         "name": name,
+        "title": registration_type,
+        "company_role": registration_type,
+        "mobile": "",
+        "direct_phone": "",
+        "switchboard": "",
+        "personal_email": "",
+        "general_email": "",
+        "primary_office": primary_office,
+        "other_offices": "",
+        "postal_code": "",
+        "city": "",
+        "profile_url": url,
+        "company_website": "",
         "registration_date": registration_date,
         "registration_type": registration_type,
         "company": company,
         "company_address": company_address,
-        "offices": " | ".join(dict.fromkeys(offices)),
         "search_area": search_area,
         "source_url": url,
+        "verification_status": "Ej verifierad",
+        "date_fetched": date.today().isoformat(),
+        "_office_set": office_values,
     }
 
 def run_search(driver, label, city=None, county=None, municipality=None):
@@ -274,16 +295,23 @@ def scrape(searches, headless=False, output=OUT_DEFAULT):
                     seen_urls.add(url)
                     try:
                         row = parse_detail(driver, url, label)
-                        key = norm(row["name"]) or norm(url)
-                        if key in seen_people:
-                            # Keep the first office/search context but never create
-                            # a second lead for the same person.
-                            continue
                         if not row["name"]:
                             raise RuntimeError("Detail page had no Fullständigt namn")
+                        # One contact per person and company. If FMI exposes the
+                        # same person under several offices, merge the office list.
+                        key = f"{norm(row['company'])}|{norm(row['name'])}" or norm(url)
+                        if key in seen_people:
+                            existing = seen_people[key]
+                            merged = list(dict.fromkeys(existing.get("_office_set", []) + row.get("_office_set", [])))
+                            existing["_office_set"] = merged
+                            existing["primary_office"] = existing.get("primary_office") or (merged[0] if merged else "")
+                            existing["other_offices"] = " | ".join(x for x in merged if x != existing.get("primary_office"))
+                            continue
+                        row["_office_set"] = list(dict.fromkeys(row.get("_office_set", [])))
+                        row["other_offices"] = " | ".join(x for x in row["_office_set"] if x != row.get("primary_office"))
                         seen_people[key] = row
                         rows.append(row)
-                        print(f"[OK] {row['name']} | {row['company']}", flush=True)
+                        print(f"[OK] {row['name']} | {row['company']} | {row['primary_office']}", flush=True)
                     except Exception as exc:
                         failures.append((label, url, str(exc)))
                         print(f"[DETAIL ERROR] {label} | {url} | {exc}", file=sys.stderr, flush=True)
@@ -294,7 +322,7 @@ def scrape(searches, headless=False, output=OUT_DEFAULT):
         driver.quit()
 
     with open(output, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDS, delimiter=";")
+        writer = csv.DictWriter(f, fieldnames=FIELDS, delimiter=";", extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
