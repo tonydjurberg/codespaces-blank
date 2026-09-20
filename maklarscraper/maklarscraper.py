@@ -143,6 +143,38 @@ def collect_profile_links(driver, source):
     except Exception:
         pass
 
+    # Booli can render broker cards as client-side click targets without a
+    # usable href in the DOM. For those cards, activate the heading itself
+    # with JavaScript and capture the resulting profile URL.
+    if source == "booli" and not links:
+        try:
+            candidates = driver.find_elements(By.CSS_SELECTOR, "h2, h3")
+            current_list = driver.current_url
+            for el in candidates[:50]:
+                try:
+                    text = clean(el.text)
+                    if not text or text.casefold() in {"mäklare", "sök mäklare i hela sverige"}:
+                        continue
+                    before_url = driver.current_url
+                    driver.execute_script("arguments[0].scrollIntoView({block:'center'}); arguments[0].click();", el)
+                    time.sleep(0.8)
+                    profile_url = absolute_internal(driver.current_url, cfg["host"])
+                    if profile_url and cfg["profile_re"].match(urlparse(profile_url).path):
+                        links.add(profile_url)
+                    if driver.current_url != before_url:
+                        driver.get(current_list)
+                        wait_page(driver)
+                        time.sleep(0.5)
+                except Exception:
+                    if driver.current_url != current_list:
+                        try:
+                            driver.get(current_list)
+                            wait_page(driver)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
     # Some sites hydrate links client-side and some runners receive a
     # different rendered DOM. Use page source first, then a plain HTTP
     # fallback so link discovery does not depend on one browser DOM shape.
