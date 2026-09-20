@@ -1,0 +1,33 @@
+name: Build MaklarScraper v2 Windows EXE
+on:
+  push:
+    paths:
+      - "maklarscraper/**"
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: maklarscraper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+      - name: Build EXE
+        run: pyinstaller --clean --noconfirm MaklarScraper_v2.spec
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item dist\MaklarScraper_v2.exe package\MaklarScraper_v2.exe
+          Set-Content package\README.txt "Double-click MaklarScraper_v2.exe. Example: MaklarScraper_v2.exe https://fmi.se/ ..."
+          Compress-Archive -Path package\* -DestinationPath MaklarScraper_v2_WINDOWS.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MaklarScraper_v2_WINDOWS
+          path: maklarscraper/MaklarScraper_v2_WINDOWS.zip
+          if-no-files-found: error
