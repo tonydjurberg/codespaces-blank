@@ -59,7 +59,7 @@ class App:
             selected=list(places.values())[:limit]
             for i,p in enumerate(selected,1):
                 if self.stop_flag: break
-                r=self.normalize(p); self.rows.append(r); self.root.after(0,lambda r=r:self.insert(r)); self.ui(f"Bearbetar {i}/{len(selected)}: {r["name"]}")
+                r=self.normalize(p); self.rows.append(r); self.root.after(0,lambda r=r:self.insert(r)); self.ui(f"Bearbetar {i}/{len(selected)}: {r['name']}")
             self.ui(f"Klar. {len(self.rows)} unika företag hittades.")
             self.root.after(0,lambda:self.export_btn.configure(state="normal" if self.rows else "disabled"))
         except Exception as e: self.root.after(0,lambda:messagebox.showerror("Fel",str(e))); self.ui("Fel.")
