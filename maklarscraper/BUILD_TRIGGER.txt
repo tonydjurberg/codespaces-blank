@@ -1,0 +1,1 @@
+Build trigger for MaklarScraper v2 Windows EXE.
