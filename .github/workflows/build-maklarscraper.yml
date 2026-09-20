@@ -1,33 +1,69 @@
-name: Build MaklarScraper v2 Windows EXE
+name: Build and test MaklarScraper v2
+
 on:
   push:
     paths:
       - "maklarscraper/**"
+      - ".github/workflows/build-maklarscraper.yml"
   workflow_dispatch:
+
 jobs:
-  build:
+  build-test:
     runs-on: windows-latest
     defaults:
       run:
         working-directory: maklarscraper
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install dependencies
+
+      - name: Install Python dependencies
         run: python -m pip install -r requirements.txt pyinstaller
-      - name: Build EXE
+
+      - name: Build Windows EXE
         run: pyinstaller --clean --noconfirm MaklarScraper_v2.spec
-      - name: Package
+
+      - name: Test Malmö against live FMI
+        run: python maklarscraper.py --mode malmo --headless --output test_malmo.csv
+
+      - name: Full Skåne scrape against live FMI
+        run: python maklarscraper.py --mode skane --headless --output maklare_fmi.csv
+
+      - name: Package EXE and results
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force package | Out-Null
           Copy-Item dist\MaklarScraper_v2.exe package\MaklarScraper_v2.exe
-          Set-Content package\README.txt "Double-click MaklarScraper_v2.exe. Example: MaklarScraper_v2.exe https://fmi.se/ ..."
+          Copy-Item maklare_fmi.csv package\maklare_fmi.csv
+          Copy-Item fmi_failures.csv package\fmi_failures.csv
+          Copy-Item test_malmo.csv package\test_malmo.csv
+          Set-Content package\README.txt "MaklarScraper_v2.exe - FMI broker scraper. Double-click to start."
           Compress-Archive -Path package\* -DestinationPath MaklarScraper_v2_WINDOWS.zip -Force
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload actual EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: MaklarScraper_v2_EXE
+          path: maklarscraper/dist/MaklarScraper_v2.exe
+          if-no-files-found: error
+
+      - name: Upload ZIP package
+        uses: actions/upload-artifact@v4
         with:
           name: MaklarScraper_v2_WINDOWS
           path: maklarscraper/MaklarScraper_v2_WINDOWS.zip
+          if-no-files-found: error
+
+      - name: Upload scraper results
+        uses: actions/upload-artifact@v4
+        with:
+          name: MaklarScraper_v2_RESULTS
+          path: |
+            maklarscraper/maklare_fmi.csv
+            maklarscraper/fmi_failures.csv
+            maklarscraper/test_malmo.csv
           if-no-files-found: error
