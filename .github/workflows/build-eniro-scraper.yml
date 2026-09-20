@@ -1,0 +1,61 @@
+name: Build and test EniroScraper v1
+
+on:
+  push:
+    paths:
+      - "eniro_scraper/**"
+      - ".github/workflows/build-eniro-scraper.yml"
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: eniro_scraper
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build Windows EXE
+        run: pyinstaller --clean --noconfirm EniroScraper_v1.spec
+
+      - name: Live Eniro smoke test
+        run: python eniro_scraper.py --query "mäklare" --pages 1 --max-results 3 --headless --output test_eniro.csv
+
+      - name: Package verified EXE
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item dist\EniroScraper_v1.exe package\EniroScraper_v1.exe
+          Copy-Item test_eniro.csv package\test_eniro.csv
+          Set-Content package\README.txt "ENIRO.SE smoke-tested public company scraper. Cookie consent is handled with normal visible consent controls. No CAPTCHA or access-control bypass."
+          Compress-Archive -Path package\* -DestinationPath EniroScraper_v1_WINDOWS.zip -Force
+
+      - name: Upload actual EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: EniroScraper_v1_EXE
+          path: eniro_scraper/dist/EniroScraper_v1.exe
+          if-no-files-found: error
+
+      - name: Upload verified ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: EniroScraper_v1_WINDOWS
+          path: eniro_scraper/EniroScraper_v1_WINDOWS.zip
+          if-no-files-found: error
+
+      - name: Upload test result
+        uses: actions/upload-artifact@v4
+        with:
+          name: EniroScraper_v1_RESULTS
+          path: eniro_scraper/test_eniro.csv
+          if-no-files-found: error
