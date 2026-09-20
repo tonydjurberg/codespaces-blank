@@ -4,43 +4,60 @@ import re
 import sys
 import time
 from datetime import date
-from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from selenium import webdriver
 from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import Select, WebDriverWait
+from selenium.webdriver.support.ui import WebDriverWait
 
-FMI_URL = "https://fmi.se/soktjanster/sok-maklare/"
-OUT_DEFAULT = "maklare_fmi.csv"
 
-SKANE_MUNICIPALITIES = [
-    "Bjuv", "Bromölla", "Burlöv", "Båstad", "Eslöv", "Helsingborg",
-    "Hässleholm", "Höganäs", "Hörby", "Höör", "Klippan", "Kristianstad",
-    "Kävlinge", "Landskrona", "Lomma", "Lund", "Malmö", "Osby",
-    "Perstorp", "Simrishamn", "Sjöbo", "Skurup", "Staffanstorp", "Svalöv",
-    "Svedala", "Tomelilla", "Trelleborg", "Vellinge", "Ystad", "Åstorp",
-    "Ängelholm", "Örkelljunga", "Östra Göinge",
-]
-
-FIELDS = [
+BASE_FIELDS = [
     "name", "title", "company_role", "mobile", "direct_phone", "switchboard",
     "personal_email", "general_email", "primary_office", "other_offices",
-    "postal_code", "city", "profile_url", "company_website", "registration_date",
-    "registration_type", "company", "company_address", "search_area", "source_url",
-    "verification_status", "date_fetched",
+    "postal_code", "city", "profile_url", "company_website",
+    "registration_date", "registration_type", "company", "company_address",
+    "search_area", "source_url", "sources", "verification_status", "date_fetched",
 ]
+
+SOURCE_CONFIG = {
+    "booli": {
+        "start": "https://www.booli.se/sok/maklare",
+        "host": "www.booli.se",
+        "profile_re": re.compile(r"^/maklare/[^/]+/?$"),
+    },
+    "hemnet": {
+        "start": "https://www.hemnet.se/sok-maklare",
+        "host": "www.hemnet.se",
+        "profile_re": re.compile(r"^/maklare/(?:profil/)?[^?#]+$"),
+    },
+    "maklarsamfundet": {
+        "start": "https://www.maklarsamfundet.se/maklarsok",
+        "host": "www.maklarsamfundet.se",
+        "profile_re": re.compile(r"^/maklare/\d+/?$"),
+    },
+}
+
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", re.I)
+PHONE_RE = re.compile(r"(?:\+46|0)\s*[0-9][0-9\s-]{6,}[0-9]")
+POSTAL_RE = re.compile(r"\b\d{3}\s?\d{2}\b")
+NOISE = {
+    "visa telefonnummer", "bli kontaktad", "kontakta mig", "boka möte",
+    "mäklarens försäljningar", "om mig", "sök mäklare", "namnsök",
+    "områdessök", "visa fler mäklare",
+}
+
 
 def clean(value):
     return re.sub(r"\s+", " ", value or "").strip()
 
+
 def norm(value):
     value = clean(value).casefold()
-    return re.sub(r"[^a-z0-9åäö]+", "", value)
+    value = value.replace("å", "a").replace("ä", "a").replace("ö", "o")
+    return re.sub(r"[^a-z0-9]+", "", value)
+
 
 def make_driver(headless=False):
     options = Options()
@@ -55,303 +72,399 @@ def make_driver(headless=False):
     options.add_argument("--disable-popup-blocking")
     return webdriver.Chrome(options=options)
 
-def visible_elements(driver, by, selector):
-    return [e for e in driver.find_elements(by, selector) if e.is_displayed()]
 
-def click_text(driver, text):
-    xpath = f"//*[self::button or self::a][contains(normalize-space(.), '{text}')]"
-    for el in visible_elements(driver, By.XPATH, xpath):
-        try:
-            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-            driver.execute_script("arguments[0].click();", el)
-            return True
-        except Exception:
-            continue
-    return False
-
-def close_message(driver):
-    # FMI currently exposes a visible "Stäng meddelandet" button.
-    click_text(driver, "Stäng meddelandet")
-
-def open_advanced(driver):
-    click_text(driver, "Fler sökalternativ")
-    WebDriverWait(driver, 8).until(
-        lambda d: any(e.is_displayed() for e in d.find_elements(By.XPATH, "//*[contains(normalize-space(.), 'Stad')]"))
-    )
-
-def find_input_for_label(driver, label):
-    label_l = label.casefold()
-    candidates = driver.find_elements(By.CSS_SELECTOR, "input")
-    for el in candidates:
-        if not el.is_displayed() or not el.is_enabled():
-            continue
-        attrs = " ".join([
-            el.get_attribute("name") or "",
-            el.get_attribute("id") or "",
-            el.get_attribute("placeholder") or "",
-            el.get_attribute("aria-label") or "",
-            el.get_attribute("title") or "",
-        ]).casefold()
-        if label_l in attrs:
-            return el
-        try:
-            parent_text = clean(el.find_element(By.XPATH, "./..").text).casefold()
-            if label_l in parent_text:
-                return el
-        except Exception:
-            pass
-    # Last resort: locate text node and use following input in the same form.
-    xpath = (
-        f"//*[self::label or self::span or self::div][contains("
-        f"translate(normalize-space(.),'ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ','abcdefghijklmnopqrstuvwxyzåäö'),"
-        f"'{label_l}')]/following::input[1]"
-    )
-    for el in driver.find_elements(By.XPATH, xpath):
-        if el.is_displayed() and el.is_enabled():
-            return el
-    return None
-
-def find_select_for_label(driver, label):
-    for el in driver.find_elements(By.CSS_SELECTOR, "select"):
-        if not el.is_displayed() or not el.is_enabled():
-            continue
-        attrs = " ".join([
-            el.get_attribute("name") or "",
-            el.get_attribute("id") or "",
-            el.get_attribute("aria-label") or "",
-            el.get_attribute("title") or "",
-        ]).casefold()
-        if label.casefold() in attrs:
-            return el
-        try:
-            if label.casefold() in clean(el.find_element(By.XPATH, "./..").text).casefold():
-                return el
-        except Exception:
-            pass
-    return None
-
-def choose_option(select_el, text):
-    select = Select(select_el)
-    for option in select.options:
-        if clean(option.text).casefold() == text.casefold():
-            select.select_by_visible_text(option.text)
-            return True
-    return False
-
-def click_search(driver):
-    xpath = "//button[normalize-space()='Sök'] | //input[@type='submit' and contains(@value,'Sök')]"
-    buttons = visible_elements(driver, By.XPATH, xpath)
-    for el in reversed(buttons):
-        try:
-            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-            driver.execute_script("arguments[0].click();", el)
-            return
-        except Exception:
-            continue
-    raise RuntimeError("FMI search button not clickable")
-
-def wait_for_results(driver):
-    WebDriverWait(driver, 15).until(
-        lambda d: "Antal träffar:" in d.find_element(By.TAG_NAME, "body").text
-        or "Din sökning gav inga resultat" in d.find_element(By.TAG_NAME, "body").text
-    )
-
-def search(driver, city=None, county=None, municipality=None):
-    driver.get(FMI_URL)
-    WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-    time.sleep(1)
-    close_message(driver)
-    open_advanced(driver)
-
-    if city:
-        inp = find_input_for_label(driver, "Stad")
-        if inp is None:
-            raise RuntimeError("FMI city input not found after opening advanced search")
-        inp.click()
-        inp.clear()
-        inp.send_keys(city)
-
-    if county:
-        sel = find_select_for_label(driver, "Län")
-        if sel is None or not choose_option(sel, county):
-            raise RuntimeError(f"FMI county selector could not select {county!r}")
-
-    if municipality:
-        sel = find_select_for_label(driver, "Kommun")
-        if sel is None or not choose_option(sel, municipality):
-            raise RuntimeError(f"FMI municipality selector could not select {municipality!r}")
-
-    click_search(driver)
-    wait_for_results(driver)
-    close_message(driver)
-    return collect_result_links(driver)
-
-def collect_result_links(driver):
-    links = []
-    seen = set()
-    for a in driver.find_elements(By.CSS_SELECTOR, "a[href]"):
-        try:
-            href = a.get_attribute("href") or ""
-            parsed = urlparse(href)
-            if parsed.netloc == "fmi.se" and parsed.path.rstrip("/") == "/soktjanster/sok-maklare" and "id=" in parsed.query:
-                href = href.split("#", 1)[0]
-                if href not in seen:
-                    seen.add(href)
-                    links.append(href)
-        except StaleElementReferenceException:
-            continue
-    return links
-
-def parse_detail(driver, url, search_area):
-    driver.get(url)
-    WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-    time.sleep(0.4)
-    close_message(driver)
-    text = driver.find_element(By.TAG_NAME, "body").text
-    lines = [clean(x) for x in text.splitlines() if clean(x)]
-
-    def after(label):
-        target = label.casefold()
-        for i, line in enumerate(lines):
-            if line.casefold().rstrip(":") == target.rstrip(":") and i + 1 < len(lines):
-                return lines[i + 1]
+def page_signature(driver):
+    try:
+        return clean(driver.find_element(By.TAG_NAME, "body").text)[:4000]
+    except Exception:
         return ""
 
-    name = after("Fullständigt namn:")
-    registration_type = after("Typ av registrering:")
-    registration_date = after("Senaste registreringsdatum:")
 
+def wait_page(driver):
+    WebDriverWait(driver, 25).until(
+        lambda d: d.find_elements(By.TAG_NAME, "body")
+        and len(clean(d.find_element(By.TAG_NAME, "body").text)) > 100
+    )
+
+
+def absolute_internal(href, host):
+    if not href:
+        return ""
+    u = urlparse(href)
+    if u.scheme not in ("http", "https") or u.netloc != host:
+        return ""
+    return urlunparse((u.scheme, u.netloc, u.path.rstrip("/") or "/", "", u.query, ""))
+
+
+def collect_profile_links(driver, source):
+    cfg = SOURCE_CONFIG[source]
+    links = set()
+    for a in driver.find_elements(By.CSS_SELECTOR, "a[href]"):
+        try:
+            href = absolute_internal(a.get_attribute("href"), cfg["host"])
+            if href and cfg["profile_re"].match(urlparse(href).path):
+                links.add(href)
+        except StaleElementReferenceException:
+            continue
+    return sorted(links)
+
+
+def next_page_url(driver, current_url, source):
+    cfg = SOURCE_CONFIG[source]
+    anchors = driver.find_elements(By.CSS_SELECTOR, "a[href]")
+    for a in anchors:
+        try:
+            text = clean(a.text).casefold()
+            href = absolute_internal(a.get_attribute("href"), cfg["host"])
+            if href and text in ("nästa", "nästa sida", "next", "›", ">"):
+                return href
+            if href and (a.get_attribute("rel") or "").casefold() == "next":
+                return href
+        except StaleElementReferenceException:
+            continue
+
+    parsed = urlparse(current_url)
+    qs = parse_qs(parsed.query)
+    current_page = int(qs.get("page", ["1"])[0])
+    if current_page >= 1000:
+        return None
+    qs["page"] = [str(current_page + 1)]
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, urlencode(qs, doseq=True), ""))
+
+
+def collect_all_profile_links(driver, source, max_pages=1000, smoke=False):
+    cfg = SOURCE_CONFIG[source]
+    current = cfg["start"]
+    seen_pages = set()
+    links = set()
+
+    for page_no in range(1, max_pages + 1):
+        if current in seen_pages:
+            break
+        seen_pages.add(current)
+        print(f"[{source.upper()}] LIST {page_no}: {current}", flush=True)
+        driver.get(current)
+        wait_page(driver)
+        time.sleep(0.5)
+
+        before = len(links)
+        page_links = collect_profile_links(driver, source)
+        links.update(page_links)
+        added = len(links) - before
+        print(f"[{source.upper()}] LIST {page_no}: +{added}, total {len(links)}", flush=True)
+
+        if smoke:
+            break
+        if added == 0 and page_no > 1:
+            break
+
+        nxt = next_page_url(driver, current, source)
+        if not nxt or nxt == current:
+            break
+        current = nxt
+
+    return sorted(links)
+
+
+def extract_contacts(driver):
+    emails = []
+    phones = []
+    for a in driver.find_elements(By.CSS_SELECTOR, "a[href]"):
+        try:
+            href = clean(a.get_attribute("href"))
+            text = clean(a.text)
+            if href.lower().startswith("mailto:"):
+                email = href[7:].split("?", 1)[0].strip()
+                if EMAIL_RE.match(email):
+                    emails.append(email)
+            elif href.lower().startswith("tel:"):
+                phone = clean(href[4:])
+                if phone:
+                    phones.append(phone)
+            elif EMAIL_RE.match(text):
+                emails.append(text)
+        except StaleElementReferenceException:
+            continue
+
+    body = driver.find_element(By.TAG_NAME, "body").text
+    for line in body.splitlines():
+        line = clean(line)
+        if EMAIL_RE.match(line):
+            emails.append(line)
+        for match in PHONE_RE.findall(line):
+            phones.append(clean(match))
+
+    return list(dict.fromkeys(emails)), list(dict.fromkeys(phones))
+
+
+def first_heading(driver):
+    for tag in ("h1", "h2"):
+        els = driver.find_elements(By.TAG_NAME, tag)
+        for el in els:
+            try:
+                t = clean(el.text)
+                if t:
+                    return t
+            except StaleElementReferenceException:
+                pass
+    return ""
+
+
+def infer_location(lines):
+    postal = ""
+    city = ""
+    for line in lines:
+        m = POSTAL_RE.search(line)
+        if m:
+            postal = m.group(0).replace(" ", "")
+            tail = clean(line[m.end():].strip(" ,|-"))
+            if tail:
+                city = tail
+            break
+    return postal, city
+
+
+def parse_booli(driver, url):
+    name = first_heading(driver)
+    emails, phones = extract_contacts(driver)
+    lines = [clean(x) for x in driver.find_element(By.TAG_NAME, "body").text.splitlines() if clean(x)]
     company = ""
-    company_address = ""
-    offices = []
-
     for i, line in enumerate(lines):
-        if line.casefold() == "företag" and i + 1 < len(lines):
-            company = lines[i + 1]
-            addr = []
-            j = i + 2
-            while j < len(lines) and lines[j].casefold() not in ("kontor inom företaget", "snabbsök"):
-                if lines[j] not in ("Arbetar på:", "Företag"):
-                    addr.append(lines[j])
-                j += 1
-            company_address = " | ".join(addr)
-        if line.casefold() == "kontor inom företaget":
-            j = i + 1
-            while j < len(lines) and lines[j].casefold() not in ("visa länk till mäklare", "snabbsök"):
-                if lines[j] not in ("Arbetar på:",):
-                    offices.append(lines[j])
-                j += 1
+        if line == name and i + 1 < len(lines):
+            candidate = lines[i + 1]
+            if candidate.casefold() not in NOISE and candidate != name:
+                company = candidate
+                break
+    postal, city = infer_location(lines)
+    return make_row("Booli", name, company, url, emails, phones, postal, city, url)
 
-    # The result page can expose the short display name as a link; the legal
-    # full name above is the authoritative name field for the CSV.
-    office_values = [clean(x) for x in offices if clean(x)]
-    primary_office = office_values[0] if office_values else company_address
+
+def parse_hemnet(driver, url):
+    name = first_heading(driver)
+    emails, phones = extract_contacts(driver)
+    lines = [clean(x) for x in driver.find_element(By.TAG_NAME, "body").text.splitlines() if clean(x)]
+    company = ""
+    if name in lines:
+        idx = lines.index(name)
+        for candidate in lines[idx + 1:idx + 6]:
+            if candidate and candidate.casefold() not in NOISE and not candidate.startswith("Image:"):
+                company = candidate
+                break
+    postal, city = infer_location(lines)
+    return make_row("Hemnet", name, company, url, emails, phones, postal, city, url)
+
+
+def parse_maklarsamfundet(driver, url):
+    name = first_heading(driver)
+    emails, phones = extract_contacts(driver)
+    lines = [clean(x) for x in driver.find_element(By.TAG_NAME, "body").text.splitlines() if clean(x)]
+    company = ""
+    address = ""
+    for i, line in enumerate(lines):
+        if line.casefold().startswith("epost:"):
+            if i + 1 < len(lines):
+                pass
+        if name and line == name:
+            for candidate in lines[i + 1:i + 8]:
+                if candidate and candidate.casefold() not in NOISE and not candidate.startswith("Epost:"):
+                    company = candidate
+                    break
+            break
+    postal, city = infer_location(lines)
+    if not postal:
+        for line in lines:
+            if "Tel:" in line:
+                continue
+            if len(line) > 8 and any(ch.isdigit() for ch in line):
+                address = line
+    return make_row("Mäklarsamfundet", name, company, url, emails, phones, postal, city, url, address)
+
+
+def make_row(source, name, company, url, emails, phones, postal="", city="", source_url="", address=""):
+    emails = list(dict.fromkeys(emails))
+    phones = list(dict.fromkeys(phones))
+    mobile = ""
+    direct = ""
+    switchboard = ""
+    for p in phones:
+        digits = re.sub(r"\D", "", p)
+        if digits.startswith("46"):
+            digits = "0" + digits[2:]
+        if len(digits) >= 9 and digits[1:2] in ("7",):
+            mobile = p
+            break
+    for p in phones:
+        if p != mobile:
+            direct = p
+            break
+
+    personal_email = emails[0] if emails else ""
+    general_email = emails[1] if len(emails) > 1 else ""
+
     return {
-        "name": name,
-        "title": registration_type,
-        "company_role": registration_type,
-        "mobile": "",
-        "direct_phone": "",
-        "switchboard": "",
-        "personal_email": "",
-        "general_email": "",
-        "primary_office": primary_office,
+        "name": clean(name),
+        "title": "Fastighetsmäklare" if name else "",
+        "company_role": "Fastighetsmäklare" if name else "",
+        "mobile": mobile,
+        "direct_phone": direct,
+        "switchboard": switchboard,
+        "personal_email": personal_email,
+        "general_email": general_email,
+        "primary_office": address,
         "other_offices": "",
-        "postal_code": "",
-        "city": "",
+        "postal_code": postal,
+        "city": city,
         "profile_url": url,
         "company_website": "",
-        "registration_date": registration_date,
-        "registration_type": registration_type,
-        "company": company,
-        "company_address": company_address,
-        "search_area": search_area,
-        "source_url": url,
-        "verification_status": "Ej verifierad",
+        "registration_date": "",
+        "registration_type": "",
+        "company": clean(company),
+        "company_address": clean(address),
+        "search_area": "Sverige",
+        "source_url": source_url or url,
+        "sources": source,
+        "verification_status": "Källprofil hittad",
         "date_fetched": date.today().isoformat(),
-        "_office_set": office_values,
     }
 
-def run_search(driver, label, city=None, county=None, municipality=None):
-    print(f"[SEARCH] {label}", flush=True)
-    links = search(driver, city=city, county=county, municipality=municipality)
-    print(f"[FOUND] {label}: {len(links)} result links", flush=True)
-    return links
 
-def scrape(searches, headless=False, output=OUT_DEFAULT):
+def parse_profile(driver, source, url):
+    driver.get(url)
+    wait_page(driver)
+    time.sleep(0.35)
+    if source == "booli":
+        return parse_booli(driver, url)
+    if source == "hemnet":
+        return parse_hemnet(driver, url)
+    return parse_maklarsamfundet(driver, url)
+
+
+def merge_rows(rows):
+    merged = {}
+    aliases = {}
+
+    for row in rows:
+        name_key = norm(row.get("name", ""))
+        company_key = norm(row.get("company", ""))
+        profile_key = norm(row.get("profile_url", ""))
+        if not name_key:
+            continue
+
+        # Strong key: same source profile URL. Cross-source key: normalized person
+        # + company. If company is missing, fall back to person + city.
+        key = f"{name_key}|{company_key}" if company_key else f"{name_key}|{norm(row.get('city',''))}"
+        if key not in merged and profile_key in aliases:
+            key = aliases[profile_key]
+
+        if key not in merged:
+            merged[key] = dict(row)
+            merged[key]["sources"] = row.get("sources", "")
+            aliases[profile_key] = key
+            continue
+
+        existing = merged[key]
+        for field in BASE_FIELDS:
+            if field == "sources":
+                continue
+            if not clean(existing.get(field)) and clean(row.get(field)):
+                existing[field] = row[field]
+
+        source_names = [x for x in (existing.get("sources", "").split(";") + row.get("sources", "").split(";")) if x]
+        existing["sources"] = ";".join(dict.fromkeys(source_names))
+
+        for field in ("mobile", "direct_phone", "switchboard", "personal_email", "general_email", "other_offices"):
+            vals = [x for x in (existing.get(field, "") + " | " + row.get(field, "")).split("|") if clean(x)]
+            existing[field] = " | ".join(dict.fromkeys(clean(x) for x in vals))
+
+        aliases[profile_key] = key
+
+    return list(merged.values())
+
+
+def scrape_sources(sources, headless=False, max_pages=1000, max_profiles=0, smoke=False):
     driver = make_driver(headless=headless)
-    rows = []
-    seen_people = {}
+    all_rows = []
     failures = []
-    seen_urls = set()
+    source_counts = {}
+
+    parsers = {
+        "booli": "Booli",
+        "hemnet": "Hemnet",
+        "maklarsamfundet": "Mäklarsamfundet",
+    }
+
     try:
-        for item in searches:
-            label = item["label"]
-            try:
-                links = run_search(driver, **item)
-                for url in links:
-                    if url in seen_urls:
-                        continue
-                    seen_urls.add(url)
-                    try:
-                        row = parse_detail(driver, url, label)
-                        if not row["name"]:
-                            raise RuntimeError("Detail page had no Fullständigt namn")
-                        # One contact per person and company. If FMI exposes the
-                        # same person under several offices, merge the office list.
-                        key = f"{norm(row['company'])}|{norm(row['name'])}" or norm(url)
-                        if key in seen_people:
-                            existing = seen_people[key]
-                            merged = list(dict.fromkeys(existing.get("_office_set", []) + row.get("_office_set", [])))
-                            existing["_office_set"] = merged
-                            existing["primary_office"] = existing.get("primary_office") or (merged[0] if merged else "")
-                            existing["other_offices"] = " | ".join(x for x in merged if x != existing.get("primary_office"))
-                            continue
-                        row["_office_set"] = list(dict.fromkeys(row.get("_office_set", [])))
-                        row["other_offices"] = " | ".join(x for x in row["_office_set"] if x != row.get("primary_office"))
-                        seen_people[key] = row
-                        rows.append(row)
-                        print(f"[OK] {row['name']} | {row['company']} | {row['primary_office']}", flush=True)
-                    except Exception as exc:
-                        failures.append((label, url, str(exc)))
-                        print(f"[DETAIL ERROR] {label} | {url} | {exc}", file=sys.stderr, flush=True)
-            except Exception as exc:
-                failures.append((label, "", str(exc)))
-                print(f"[SEARCH ERROR] {label} | {exc}", file=sys.stderr, flush=True)
+        for source in sources:
+            print(f"[SOURCE] {source}", flush=True)
+            links = collect_all_profile_links(driver, source, max_pages=max_pages, smoke=smoke)
+            if max_profiles:
+                links = links[:max_profiles]
+            source_counts[source] = len(links)
+            print(f"[{source.upper()}] PROFILE LINKS: {len(links)}", flush=True)
+
+            for i, url in enumerate(links, 1):
+                try:
+                    row = parse_profile(driver, source, url)
+                    if not row["name"]:
+                        raise RuntimeError("profile page has no name heading")
+                    all_rows.append(row)
+                    if i % 25 == 0 or smoke:
+                        print(f"[{source.upper()}] PROFILES {i}/{len(links)}", flush=True)
+                except Exception as exc:
+                    failures.append((parsers[source], url, str(exc)))
+                    print(f"[PROFILE ERROR] {source} | {url} | {exc}", file=sys.stderr, flush=True)
+                    if smoke and i >= 3:
+                        break
     finally:
         driver.quit()
 
-    with open(output, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=FIELDS, delimiter=";", extrasaction="ignore")
+    merged = merge_rows(all_rows)
+    return merged, failures, source_counts
+
+
+def write_csv(path, rows):
+    with open(path, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=BASE_FIELDS, delimiter=";", extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
-    with open("fmi_failures.csv", "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.writer(f, delimiter=";")
-        w.writerow(["search_area", "url", "error"])
-        w.writerows(failures)
-
-    print(f"[DONE] {len(rows)} unique brokers -> {output}", flush=True)
-    print(f"[DONE] {len(failures)} failures -> fmi_failures.csv", flush=True)
-    return 0 if rows else 2
-
-def build_searches(mode):
-    if mode == "malmo":
-        return [{"label": "Malmö", "city": "Malmö"}]
-    if mode == "skane":
-        return [{"label": "Skåne", "county": "Skåne"}]
-    if mode == "skane-municipalities":
-        return [{"label": municipality, "municipality": municipality} for municipality in SKANE_MUNICIPALITIES]
-    raise ValueError(mode)
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["malmo", "skane", "skane-municipalities"], default="malmo")
-    ap.add_argument("--output", default=OUT_DEFAULT)
+    ap = argparse.ArgumentParser(description="Swedish broker scraper: Booli + Hemnet + Mäklarsamfundet")
+    ap.add_argument("--sources", default="booli,hemnet,maklarsamfundet")
     ap.add_argument("--headless", action="store_true")
+    ap.add_argument("--max-pages", type=int, default=1000)
+    ap.add_argument("--max-profiles", type=int, default=0)
+    ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--output", default="maklare_combined.csv")
     args = ap.parse_args()
-    searches = build_searches(args.mode)
-    return scrape(searches, headless=args.headless, output=args.output)
+
+    sources = [x.strip().lower() for x in args.sources.split(",") if x.strip()]
+    invalid = [x for x in sources if x not in SOURCE_CONFIG]
+    if invalid:
+        raise SystemExit(f"Unknown source(s): {', '.join(invalid)}")
+
+    rows, failures, counts = scrape_sources(
+        sources,
+        headless=args.headless,
+        max_pages=args.max_pages,
+        max_profiles=args.max_profiles,
+        smoke=args.smoke,
+    )
+
+    write_csv(args.output, rows)
+    with open("maklare_failures.csv", "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(["source", "url", "error"])
+        w.writerows(failures)
+
+    print(f"[DONE] source profile counts: {counts}", flush=True)
+    print(f"[DONE] {len(rows)} unique merged brokers -> {args.output}", flush=True)
+    print(f"[DONE] {len(failures)} failures -> maklare_failures.csv", flush=True)
+    if args.smoke and not rows:
+        return 2
+    return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
