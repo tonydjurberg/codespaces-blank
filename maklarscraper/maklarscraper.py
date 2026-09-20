@@ -72,7 +72,17 @@ def make_driver(headless=False):
     options.add_argument("--lang=sv-SE")
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-popup-blocking")
-    return webdriver.Chrome(options=options)
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
+    driver = webdriver.Chrome(options=options)
+    try:
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined}); Object.defineProperty(navigator, 'languages', {get: () => ['sv-SE','sv','en-US','en']}); Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});"},
+        )
+    except Exception:
+        pass
+    return driver
 
 
 def page_signature(driver):
@@ -190,7 +200,12 @@ def collect_all_profile_links(driver, source, max_pages=1000, smoke=False):
         print(f"[{source.upper()}] LIST {page_no}: {current}", flush=True)
         driver.get(current)
         wait_page(driver)
-        time.sleep(0.5)
+        time.sleep(2.0)
+        try:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1.0)
+        except Exception:
+            pass
 
         before = len(links)
         page_links = collect_profile_links(driver, source)
