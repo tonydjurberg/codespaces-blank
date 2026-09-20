@@ -136,7 +136,8 @@ def choose_option(select_el, text):
 
 def click_search(driver):
     xpath = "//button[normalize-space()='Sök'] | //input[@type='submit' and contains(@value,'Sök')]"
-    for el in visible_elements(driver, By.XPATH, xpath):
+    buttons = visible_elements(driver, By.XPATH, xpath)
+    for el in reversed(buttons):
         try:
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
             driver.execute_script("arguments[0].click();", el)
