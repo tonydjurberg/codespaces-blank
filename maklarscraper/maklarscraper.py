@@ -99,6 +99,8 @@ def absolute_internal(href, host):
 def collect_profile_links(driver, source):
     cfg = SOURCE_CONFIG[source]
     links = set()
+
+    # First use Selenium's live DOM.
     for a in driver.find_elements(By.CSS_SELECTOR, "a[href]"):
         try:
             href = absolute_internal(a.get_attribute("href"), cfg["host"])
@@ -106,6 +108,23 @@ def collect_profile_links(driver, source):
                 links.add(href)
         except StaleElementReferenceException:
             continue
+
+    # Some of these sites hydrate profile links after the initial DOM is built.
+    # The rendered HTML is a more reliable fallback than relying on one CSS pass.
+    try:
+        html = driver.page_source or ""
+        pattern = {
+            "booli": r'https?://www\\.booli\\.se/maklare/[^"\\\'<>\\s?#]+',
+            "hemnet": r'https?://www\\.hemnet\\.se/maklare/[^"\\\'<>\\s?#]+',
+            "maklarsamfundet": r'https?://www\\.maklarsamfundet\\.se/maklare/\\d+/?',
+        }[source]
+        for raw in re.findall(pattern, html, flags=re.I):
+            href = absolute_internal(raw, cfg["host"])
+            if href and cfg["profile_re"].match(urlparse(href).path):
+                links.add(href)
+    except Exception:
+        pass
+
     return sorted(links)
 
 
