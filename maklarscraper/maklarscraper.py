@@ -121,6 +121,28 @@ def collect_profile_links(driver, source):
         except StaleElementReferenceException:
             continue
 
+    # React/Next-style cards may store profile URLs in non-anchor attributes.
+    try:
+        js_links = driver.execute_script("""
+            const out = new Set();
+            const re = /(?:https?:\/\/www\\.booli\\.se)?\\/maklare\\/[^"'<>\\s?#]+/gi;
+            for (const el of document.querySelectorAll('*')) {
+                for (const attr of el.attributes || []) {
+                    const m = (attr.value || '').match(re);
+                    if (m) for (const x of m) out.add(x);
+                }
+            }
+            const html = document.documentElement.outerHTML || '';
+            for (const x of html.match(re) || []) out.add(x);
+            return Array.from(out);
+        """)
+        for raw in js_links or []:
+            href = absolute_internal(urljoin(cfg["start"], raw), cfg["host"])
+            if href and cfg["profile_re"].match(urlparse(href).path):
+                links.add(href)
+    except Exception:
+        pass
+
     # Some sites hydrate links client-side and some runners receive a
     # different rendered DOM. Use page source first, then a plain HTTP
     # fallback so link discovery does not depend on one browser DOM shape.
