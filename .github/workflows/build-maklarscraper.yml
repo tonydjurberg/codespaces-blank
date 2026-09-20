@@ -27,21 +27,29 @@ jobs:
       - name: Build Windows EXE
         run: pyinstaller --clean --noconfirm MaklarScraper_v2.spec
 
-      - name: Test Malmö against live FMI
-        run: python maklarscraper.py --mode malmo --headless --output test_malmo.csv
+      - name: Live smoke test Booli
+        run: python maklarscraper.py --sources booli --headless --smoke --max-pages 1 --max-profiles 3 --output test_booli.csv
 
-      - name: Full Skåne municipality scrape against live FMI
-        run: python maklarscraper.py --mode skane-municipalities --headless --output maklare_fmi.csv
+      - name: Live smoke test Hemnet
+        run: python maklarscraper.py --sources hemnet --headless --smoke --max-pages 1 --max-profiles 3 --output test_hemnet.csv
 
-      - name: Package EXE and results
+      - name: Live smoke test Mäklarsamfundet
+        run: python maklarscraper.py --sources maklarsamfundet --headless --smoke --max-pages 1 --max-profiles 3 --output test_maklarsamfundet.csv
+
+      - name: Cross-source merge smoke test
+        run: python maklarscraper.py --sources booli,hemnet,maklarsamfundet --headless --smoke --max-pages 1 --max-profiles 3 --output test_combined.csv
+
+      - name: Package EXE and smoke-test results
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force package | Out-Null
           Copy-Item dist\MaklarScraper_v2.exe package\MaklarScraper_v2.exe
-          Copy-Item maklare_fmi.csv package\maklare_fmi.csv
-          Copy-Item fmi_failures.csv package\fmi_failures.csv
-          Copy-Item test_malmo.csv package\test_malmo.csv
-          Set-Content package\README.txt "MaklarScraper_v2.exe - FMI broker scraper. Double-click to start."
+          Copy-Item test_booli.csv package\test_booli.csv
+          Copy-Item test_hemnet.csv package\test_hemnet.csv
+          Copy-Item test_maklarsamfundet.csv package\test_maklarsamfundet.csv
+          Copy-Item test_combined.csv package\test_combined.csv
+          Copy-Item maklare_failures.csv package\maklare_failures.csv
+          Set-Content package\README.txt "MaklarScraper_v2.exe - Booli + Hemnet + Maklarsamfundet. FMI remains available for later engineering."
           Compress-Archive -Path package\* -DestinationPath MaklarScraper_v2_WINDOWS.zip -Force
 
       - name: Upload actual EXE
@@ -58,12 +66,14 @@ jobs:
           path: maklarscraper/MaklarScraper_v2_WINDOWS.zip
           if-no-files-found: error
 
-      - name: Upload scraper results
+      - name: Upload smoke-test results
         uses: actions/upload-artifact@v4
         with:
           name: MaklarScraper_v2_RESULTS
           path: |
-            maklarscraper/maklare_fmi.csv
-            maklarscraper/fmi_failures.csv
-            maklarscraper/test_malmo.csv
+            maklarscraper/test_booli.csv
+            maklarscraper/test_hemnet.csv
+            maklarscraper/test_maklarsamfundet.csv
+            maklarscraper/test_combined.csv
+            maklarscraper/maklare_failures.csv
           if-no-files-found: error
