@@ -3,6 +3,8 @@ import csv
 import re
 import sys
 import time
+import html as html_lib
+from urllib.request import Request, urlopen
 from datetime import date
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
@@ -109,21 +111,45 @@ def collect_profile_links(driver, source):
         except StaleElementReferenceException:
             continue
 
-    # Some of these sites hydrate profile links after the initial DOM is built.
-    # The rendered HTML is a more reliable fallback than relying on one CSS pass.
+    # Some sites hydrate links client-side and some runners receive a
+    # different rendered DOM. Use page source first, then a plain HTTP
+    # fallback so link discovery does not depend on one browser DOM shape.
     try:
-        html = driver.page_source or ""
+        html = html_lib.unescape(driver.page_source or "")
         pattern = {
-            "booli": r'https?://www\\.booli\\.se/maklare/[^"\\\'<>\\s?#]+',
-            "hemnet": r'https?://www\\.hemnet\\.se/maklare/[^"\\\'<>\\s?#]+',
-            "maklarsamfundet": r'https?://www\\.maklarsamfundet\\.se/maklare/\\d+/?',
+            "booli": r'https?://www\.booli\.se/maklare/[^"\'<>\s?#]+|/maklare/[^"\'<>\s?#]+',
+            "hemnet": r'https?://www\.hemnet\.se/maklare/(?:profil/)?[^"\'<>\s?#]+|/maklare/(?:profil/)?[^"\'<>\s?#]+',
+            "maklarsamfundet": r'https?://www\.maklarsamfundet\.se/maklare/\d+/?|/maklare/\d+/?',
         }[source]
         for raw in re.findall(pattern, html, flags=re.I):
-            href = absolute_internal(raw, cfg["host"])
+            href = absolute_internal(urljoin(cfg["start"], raw), cfg["host"])
             if href and cfg["profile_re"].match(urlparse(href).path):
                 links.add(href)
     except Exception:
         pass
+
+    if not links:
+        try:
+            req = Request(
+                cfg["start"],
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140 Safari/537.36",
+                    "Accept-Language": "sv-SE,sv;q=0.9,en;q=0.8",
+                },
+            )
+            with urlopen(req, timeout=30) as response:
+                raw_html = html_lib.unescape(response.read().decode("utf-8", errors="ignore"))
+            pattern = {
+                "booli": r'href=["\']([^"\']*?/maklare/[^"\']+)',
+                "hemnet": r'href=["\']([^"\']*?/maklare/(?:profil/)?[^"\']+)',
+                "maklarsamfundet": r'href=["\']([^"\']*?/maklare/\d+/?[^"\']*)',
+            }[source]
+            for raw in re.findall(pattern, raw_html, flags=re.I):
+                href = absolute_internal(urljoin(cfg["start"], raw), cfg["host"])
+                if href and cfg["profile_re"].match(urlparse(href).path):
+                    links.add(href)
+        except Exception as exc:
+            print(f"[{source.upper()}] HTTP link fallback failed: {exc}", file=sys.stderr, flush=True)
 
     return sorted(links)
 
