@@ -30,8 +30,8 @@ jobs:
       - name: Test Malmö against live FMI
         run: python maklarscraper.py --mode malmo --headless --output test_malmo.csv
 
-      - name: Full Skåne scrape against live FMI
-        run: python maklarscraper.py --mode skane --headless --output maklare_fmi.csv
+      - name: Full Skåne municipality scrape against live FMI
+        run: python maklarscraper.py --mode skane-municipalities --headless --output maklare_fmi.csv
 
       - name: Package EXE and results
         shell: pwsh
