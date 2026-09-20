@@ -36,7 +36,7 @@ def clean(value):
 
 def norm(value):
     value = clean(value).casefold()
-    return re.sub(r"\s+", " ", value or "").strip()
+    return re.sub(r"[^a-z0-9åäö]+", "", value)
 
 def make_driver(headless=False):
     options = Options()
