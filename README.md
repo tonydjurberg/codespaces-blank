@@ -20,3 +20,5 @@ Setup:
 6. Export CSV.
 
 Google documentation: https://developers.google.com/maps/documentation/places/web-service
+
+Build target: GoogleMapsScraper.exe
