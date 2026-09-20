@@ -32,11 +32,11 @@ FIELDS = [
 ]
 
 def clean(value):
-    return re.sub(r"\\s+", " ", value or "").strip()
+    return re.sub(r"\s+", " ", value or "").strip()
 
 def norm(value):
     value = clean(value).casefold()
-    return re.sub(r"[^a-z0-9åäö]+", "", value)
+    return re.sub(r"\s+", " ", value or "").strip()
 
 def make_driver(headless=False):
     options = Options()
