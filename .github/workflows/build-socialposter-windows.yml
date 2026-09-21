@@ -1,0 +1,44 @@
+name: Build SocialPoster Windows
+
+on:
+  push:
+    paths:
+      - 'SocialPoster/**'
+      - '.github/workflows/build-socialposter-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install -r SocialPoster/requirements.txt pyinstaller
+      - name: Build EXE
+        working-directory: SocialPoster
+        run: python -m PyInstaller --noconfirm --clean --onefile --windowed --name SocialPoster SocialPoster.py
+      - name: Smoke check
+        shell: powershell
+        run: |
+          if (!(Test-Path 'SocialPoster/dist/SocialPoster.exe')) { throw 'SocialPoster.exe was not created' }
+          Get-Item 'SocialPoster/dist/SocialPoster.exe' | Format-List Name,Length,FullName
+      - name: Package
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item 'SocialPoster/dist/SocialPoster.exe' 'package/SocialPoster.exe'
+          Copy-Item 'SocialPoster/SocialPoster.py' 'package/SocialPoster.py'
+          Copy-Item 'SocialPoster/requirements.txt' 'package/requirements.txt'
+          Copy-Item 'SocialPoster/build_windows.bat' 'package/build_windows.bat'
+          Set-Content 'package/README.txt' 'SocialPoster fixed build. X excluded. Social platform names are trimmed automatically. The EXE is one-file and Windows-ready.'
+          Compress-Archive -Path 'package/*' -DestinationPath 'SocialPoster_Windows_FIXED.zip' -Force
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SocialPoster_Windows_FIXED
+          path: SocialPoster_Windows_FIXED.zip
