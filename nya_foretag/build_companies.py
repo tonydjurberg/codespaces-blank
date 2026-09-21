@@ -3,12 +3,8 @@ import csv, io, re, sys
 from pathlib import Path
 import pandas as pd
 
-EXPECTED = [
-    "organisationsidentitet","namnskyddslopnummer","registreringsland",
-    "organisationsnamn","organisationsform","avregistreringsdatum",
-    "avregistreringsorsak","pagandeAvvecklingsEllerOmstruktureringsforfarande",
-    "registreringsdatum","verksamhetsbeskrivning","postadress"
-]
+def norm_col(c):
+    return re.sub(r"[^a-z0-9åäöé]","",str(c).lower())
 
 def clean_org(v):
     s = re.sub(r"\D","",str(v or ""))
@@ -18,57 +14,111 @@ def clean_org(v):
 
 def parse_name(v):
     if not v: return ""
-    first = str(v).split("|",1)[0]
-    return first.split("$",1)[0].strip()
+    return str(v).split("|",1)[0].split("$",1)[0].strip()
 
 def read_txt(path):
     raw = Path(path).read_bytes()
     text = raw.decode("utf-8-sig", errors="replace")
-    lines = text.splitlines()
-    if not lines: raise ValueError("Empty Bolagsverket TXT file")
-    sample = "\n".join(lines[:30])
-    candidates = ["\t",";"]
+    sample = "\n".join(text.splitlines()[:30])
     best = None
-    for sep in candidates:
+    for sep in ("\t",";","|"):
         rows = list(csv.reader(io.StringIO(sample), delimiter=sep))
         score = max((len(r) for r in rows), default=0)
-        if best is None or score > best[0]:
-            best = (score, sep)
-    if best[0] < 10:
-        raise ValueError("Could not identify the official TXT delimiter")
-    df = pd.read_csv(path, sep=best[1], dtype=str, encoding="utf-8-sig",
-                     keep_default_na=False, engine="python", quoting=csv.QUOTE_MINIMAL)
-    if len(df.columns) < 10:
-        raise ValueError(f"Expected ~11 columns, got {len(df.columns)}")
-    df.columns = [c.strip() for c in df.columns]
-    return df
+        if best is None or score > best[0]: best = (score, sep)
+    if not best or best[0] < 5:
+        raise ValueError(f"Cannot detect delimiter in {path}")
+    return pd.read_csv(path, sep=best[1], dtype=str, encoding="utf-8-sig",
+                       keep_default_na=False, engine="python", quoting=csv.QUOTE_MINIMAL)
+
+def find_col(df, *names):
+    m = {norm_col(c): c for c in df.columns}
+    for n in names:
+        k = norm_col(n)
+        if k in m: return m[k]
+    for c in df.columns:
+        nc = norm_col(c)
+        if any(norm_col(n) in nc for n in names):
+            return c
+    return None
+
+def first_txt(folder, exclude=None):
+    for p in Path(folder).rglob("*.txt"):
+        if exclude and exclude.lower() in p.name.lower(): continue
+        return p
+    return None
 
 def main():
     if len(sys.argv) != 3:
-        raise SystemExit("Usage: build_companies.py INPUT.txt OUTPUT.csv")
-    src, out = map(Path, sys.argv[1:])
-    df = read_txt(src)
-    # Match official field names case-insensitively.
-    lookup = {c.lower(): c for c in df.columns}
-    missing = [c for c in EXPECTED if c.lower() not in lookup]
-    if missing:
-        raise ValueError("Missing official fields: " + ", ".join(missing))
-    df = df.rename(columns={lookup[c.lower()]: c for c in EXPECTED})
+        raise SystemExit("Usage: build_companies.py INPUT_DIR OUTPUT.csv")
+    srcdir, out = map(Path, sys.argv[1:])
+    bv = first_txt(srcdir, "scb")
+    if not bv: raise ValueError("No Bolagsverket TXT found")
+    bdf = read_txt(bv)
+    orgc = find_col(bdf, "organisationsidentitet","orgnr","organisationsnummer")
+    namec = find_col(bdf, "organisationsnamn","företagsnamn","namn")
+    regc = find_col(bdf, "registreringsdatum")
+    formc = find_col(bdf, "organisationsform","juridiskform")
+    desc = find_col(bdf, "verksamhetsbeskrivning")
+    addrc = find_col(bdf, "postadress")
+    if not all([orgc,namec,regc]):
+        raise ValueError("Required Bolagsverket fields missing")
     outdf = pd.DataFrame()
-    outdf["organisationsnummer"] = df["organisationsidentitet"].map(clean_org)
-    outdf["företagsnamn"] = df["organisationsnamn"].map(parse_name)
-    outdf["registreringsdatum"] = df["registreringsdatum"].replace("", pd.NA)
-    outdf["status"] = df["avregistreringsdatum"].apply(lambda x: "avregistrerad" if str(x).strip() else "registrerad")
-    outdf["organisationsform"] = df["organisationsform"]
-    outdf["verksamhetsbeskrivning"] = df["verksamhetsbeskrivning"]
-    addr = df["postadress"].astype(str).str.split("$", n=4, expand=True)
-    for i,name in enumerate(["adress","c_o_adress","postnummer","ort","land"]):
-        outdf[name] = addr[i] if i in addr.columns else ""
+    outdf["organisationsnummer"] = bdf[orgc].map(clean_org)
+    outdf["företagsnamn"] = bdf[namec].map(parse_name)
+    outdf["registreringsdatum"] = bdf[regc]
+    outdf["status"] = bdf[find_col(bdf,"avregistreringsdatum")].apply(lambda x: "avregistrerad" if str(x).strip() else "registrerad") if find_col(bdf,"avregistreringsdatum") else ""
+    outdf["organisationsform"] = bdf[formc] if formc else ""
+    outdf["verksamhetsbeskrivning"] = bdf[desc] if desc else ""
+    if addrc:
+        addr = bdf[addrc].astype(str).str.split("$", n=4, expand=True)
+        for i,n in enumerate(["adress","c_o_adress","postnummer","ort","land"]):
+            outdf[n] = addr[i] if i in addr.columns else ""
+    else:
+        for n in ["adress","c_o_adress","postnummer","ort","land"]: outdf[n]=""
+
+    scb = None
+    for p in Path(srcdir).rglob("*.txt"):
+        if "scb" in p.name.lower():
+            scb = p; break
+    if scb:
+        sdf = read_txt(scb)
+        so = find_col(sdf,"OrgNr","PeOrgNr","organisationsnummer")
+        if so:
+            s = pd.DataFrame()
+            s["organisationsnummer"] = sdf[so].map(clean_org)
+            mappings = {
+                "telefon":("Telefon","telefonnummer"),
+                "e_post":("E-post","Epost","email"),
+                "sni_1":("Ng1","SNI","Bransch_1"),
+                "sni_2":("Ng2",),
+                "sni_3":("Ng3",),
+                "sni_4":("Ng4",),
+                "sni_5":("Ng5",),
+                "anstallda_storleksklass":("AnstSME","Storleksklass","Antal anställda"),
+                "reklam":("Reklam",),
+                "arbetsstallen":("Antal arbetsställen","AntalArbetsställen"),
+                "webbplats":("Webbplats","Hemsida","Internetadress"),
+            }
+            for outname,names in mappings.items():
+                c=find_col(sdf,*names)
+                s[outname]=sdf[c] if c else ""
+            s=s.drop_duplicates("organisationsnummer")
+            outdf=outdf.merge(s,on="organisationsnummer",how="left")
+        else:
+            for n in ["telefon","e_post","sni_1","sni_2","sni_3","sni_4","sni_5","anstallda_storleksklass","reklam","arbetsstallen","webbplats"]: outdf[n]=""
+    else:
+        for n in ["telefon","e_post","sni_1","sni_2","sni_3","sni_4","sni_5","anstallda_storleksklass","reklam","arbetsstallen","webbplats"]: outdf[n]=""
+
+    outdf["mobil"] = ""
+    outdf["telefon_kalla"] = outdf["telefon"].apply(lambda x: "SCB" if str(x).strip() else "")
+    outdf["mobil_kalla"] = ""
     outdf = outdf[(outdf["organisationsnummer"].str.len()==10) & outdf["företagsnamn"].ne("")]
     outdf = outdf.drop_duplicates("organisationsnummer", keep="first")
     outdf = outdf.sort_values(["registreringsdatum","företagsnamn"], ascending=[False,True], na_position="last")
-    outdf.to_csv(out, index=False, encoding="utf-8-sig", quoting=csv.QUOTE_MINIMAL)
+    outdf.to_csv(out, index=False, encoding="utf-8-sig")
     print(f"ROWS={len(outdf)}")
+    print(f"WITH_PHONE={outdf['telefon'].astype(str).str.strip().ne('').sum()}")
+    print(f"WITH_MOBILE={outdf['mobil'].astype(str).str.strip().ne('').sum()}")
     print(f"OUTPUT={out}")
 
 if __name__ == "__main__":
