@@ -1,0 +1,24 @@
+name: "Source 8 - LinkedIn authorized enrichment"
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/source_linkedin_enrichment.yml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check authorized LinkedIn enrichment provider
+        env:
+          APOLLO_KEY: ${{ secrets.APOLLO_API_KEY }}
+          SIMILARWEB_KEY: ${{ secrets.SIMILARWEB_API_KEY }}
+        run: |
+          if [ -n "$APOLLO_KEY" ]; then
+            echo "Apollo key present: authorized contact/company enrichment can be added."
+          elif [ -n "$SIMILARWEB_KEY" ]; then
+            echo "Similarweb key present: authorized contact search can be added."
+          else
+            echo "No authorized LinkedIn/contact-provider key configured yet."
+          fi
+          echo "No LinkedIn scraping or access-control bypass is performed."
+          exit 0
