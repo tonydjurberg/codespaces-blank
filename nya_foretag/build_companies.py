@@ -27,8 +27,12 @@ def read_txt(path):
         if best is None or score > best[0]: best = (score, sep)
     if not best or best[0] < 5:
         raise ValueError(f"Cannot detect delimiter in {path}")
+    # Bolagsverket's official TXT can contain literal quote characters inside
+    # free-text fields. Treat the file as delimiter-separated data rather than
+    # interpreting those quotes as CSV quoting.
     return pd.read_csv(path, sep=best[1], dtype=str, encoding="utf-8-sig",
-                       keep_default_na=False, engine="python", quoting=csv.QUOTE_MINIMAL)
+                       keep_default_na=False, engine="python",
+                       quoting=csv.QUOTE_NONE, on_bad_lines="error")
 
 def find_col(df, *names):
     m = {norm_col(c): c for c in df.columns}
