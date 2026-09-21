@@ -7,6 +7,9 @@ on:
       - ".github/workflows/build_swedish_companies.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,51 +20,65 @@ jobs:
       - name: Download official Bolagsverket and SCB bulk files
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
           python - <<'PY'
           import re, urllib.request
-          page='https://bolagsverket.se/apierochoppnadata/hamtaforetagsinformation/nedladdningsbarafiler.2517.html'
-          html=urllib.request.urlopen(page, timeout=60).read().decode('utf-8','ignore')
-          for name in ['bolagsverket_bulkfil.zip','scb_bulkfil.zip']:
-              m=re.search(r'href=["\\']([^"\\']*'+re.escape(name)+r')["\\']', html, re.I)
-              if not m:
-                  m=re.search(r'https?://[^"\\'\\s<>]*'+re.escape(name), html, re.I)
-              if not m: raise SystemExit('Could not locate '+name+' on official Bolagsverket page')
-              url=m.group(1)
-              if url.startswith('/'): url='https://bolagsverket.se'+url
-              print(name, url)
-              urllib.request.urlretrieve(url, '/tmp/'+name)
+          from urllib.parse import urljoin
+          page = "https://bolagsverket.se/apierochoppnadata/hamtaforetagsinformation/nedladdningsbarafiler.2517.html"
+          req = urllib.request.Request(page, headers={"User-Agent":"Mozilla/5.0"})
+          html = urllib.request.urlopen(req, timeout=60).read().decode("utf-8","ignore")
+          for name in ("bolagsverket_bulkfil.zip","scb_bulkfil.zip"):
+              patterns = [
+                  rf'href="([^"]*{re.escape(name)}[^"]*)"',
+                  rf"href='([^']*{re.escape(name)}[^']*)'",
+                  rf'(https?://[^\s"<>]*{re.escape(name)})'
+              ]
+              url = None
+              for pattern in patterns:
+                  m = re.search(pattern, html, re.I)
+                  if m:
+                      url = urljoin(page, m.group(1))
+                      break
+              if not url:
+                  raise SystemExit("Could not locate " + name + " on official Bolagsverket page")
+              print("Downloading", name, "from", url)
+              urllib.request.urlretrieve(url, "/tmp/" + name)
           PY
-          mkdir -p data/bulk
+          mkdir -p data/bulk/bolagsverket data/bulk/scb
           unzip -o /tmp/bolagsverket_bulkfil.zip -d data/bulk/bolagsverket
           unzip -o /tmp/scb_bulkfil.zip -d data/bulk/scb
       - name: Build master CSV
         run: python nya_foretag/build_companies.py data/bulk data/master_150k.csv
-      - name: Validate phone coverage
+      - name: Validate dataset
         run: |
           python - <<'PY'
           import pandas as pd
-          p='data/master_150k.csv'
-          df=pd.read_csv(p,dtype=str).fillna('')
-          if len(df)<150000: raise SystemExit(f'Only {len(df)} rows; refusing to package 150000')
-          if df.organisationsnummer.duplicated().any(): raise SystemExit('Duplicate organisation numbers')
-          if (df.företagsnamn=='').any(): raise SystemExit('Blank company names')
-          print('ROWS',len(df))
-          print('PHONE',df.telefon.str.strip().ne('').sum())
-          print('MOBILE',df.mobil.str.strip().ne('').sum())
+          df = pd.read_csv("data/master_150k.csv", dtype=str).fillna("")
+          required = ["organisationsnummer","företagsnamn","telefon","mobil"]
+          missing = [c for c in required if c not in df.columns]
+          if missing: raise SystemExit("Missing columns: " + ", ".join(missing))
+          if len(df) < 150000: raise SystemExit(f"Only {len(df)} records available; refusing to create 150000")
+          if df["organisationsnummer"].duplicated().any(): raise SystemExit("Duplicate organisation numbers")
+          if df["företagsnamn"].str.strip().eq("").any(): raise SystemExit("Blank company names")
+          print("ROWS",len(df))
+          print("PHONE",df["telefon"].str.strip().ne("").sum())
+          print("MOBILE",df["mobil"].str.strip().ne("").sum())
+          print("WEBSITE",df.get("webbplats",pd.Series(dtype=str)).str.strip().ne("").sum())
           PY
       - name: Split into 15 ZIP files
         run: |
           python - <<'PY'
-          import pandas as pd, zipfile, pathlib
-          df=pd.read_csv('data/master_150k.csv',dtype=str).fillna('')
-          out=pathlib.Path('dist'); out.mkdir(exist_ok=True)
+          import pandas as pd, zipfile
+          from pathlib import Path
+          df=pd.read_csv("data/master_150k.csv",dtype=str).fillna("")
+          out=Path("dist"); out.mkdir(exist_ok=True)
           for i,start in enumerate(range(0,150000,10000),1):
-              csvp=out/f'svenska_foretag_{i:02d}.csv'
-              zipp=out/f'svenska_foretag_{i:02d}.zip'
-              df.iloc[start:start+10000].to_csv(csvp,index=False,encoding='utf-8-sig')
-              with zipfile.ZipFile(zipp,'w',zipfile.ZIP_DEFLATED) as z: z.write(csvp,csvp.name)
-              csvp.unlink()
+              c=out/f"svenska_foretag_{i:02d}.csv"
+              z=out/f"svenska_foretag_{i:02d}.zip"
+              df.iloc[start:start+10000].to_csv(c,index=False,encoding="utf-8-sig")
+              with zipfile.ZipFile(z,"w",zipfile.ZIP_DEFLATED) as f: f.write(c,c.name)
+              c.unlink()
+          print("Created",len(list(out.glob("*.zip"))),"ZIP files")
           PY
       - name: Upload 15 ZIP files
         uses: actions/upload-artifact@v4
