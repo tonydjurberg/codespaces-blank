@@ -1,0 +1,16 @@
+name: Source 4 - BolagsAPI
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/source_bolagsapi.yml"
+jobs:
+  bolagsapi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test BolagsAPI
+        env:
+          BOLAGSAPI_KEY: ${{ secrets.BOLAGSAPI_KEY }}
+        run: |
+          test -n "$BOLAGSAPI_KEY" || { echo "BOLAGSAPI_KEY secret missing"; exit 1; }
+          curl -fsS "https://api.bolagsapi.se/v1/search?q=Volvo&limit=1"             -H "Authorization: Bearer $BOLAGSAPI_KEY" | head -c 4000
