@@ -1,0 +1,16 @@
+name: Source 3 - Bolagsdata API
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/source_bolagsdata.yml"
+jobs:
+  bolagsdata:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Bolagsdata API
+        env:
+          BOLAGSDATA_API_KEY: ${{ secrets.BOLAGSDATA_API_KEY }}
+        run: |
+          test -n "$BOLAGSDATA_API_KEY" || { echo "BOLAGSDATA_API_KEY secret missing"; exit 1; }
+          curl -fsS "https://bolagsdataapi.se/api/v1/search?q=Volvo&limit=1"             -H "x-api-key: $BOLAGSDATA_API_KEY" | head -c 4000
