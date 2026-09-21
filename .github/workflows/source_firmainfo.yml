@@ -1,0 +1,21 @@
+name: "Source 6 - Firmainfo contacts"
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/source_firmainfo.yml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Firmainfo API
+        env:
+          KEY: ${{ secrets.FIRMAINFO_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "FIRMAINFO_API_KEY not configured; source remains available for authorized enrichment."
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/r.json -w "%{http_code}" -H "Authorization: Bearer $KEY" "https://firmainfo.se/api/v1/companies/5560125790/contact")
+          test "$code" = "200"
+          cat /tmp/r.json
