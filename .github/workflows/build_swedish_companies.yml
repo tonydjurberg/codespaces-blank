@@ -21,30 +21,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import re, urllib.request
-          from urllib.parse import urljoin
-          page = "https://bolagsverket.se/apierochoppnadata/hamtaforetagsinformation/nedladdningsbarafiler.2517.html"
-          req = urllib.request.Request(page, headers={"User-Agent":"Mozilla/5.0"})
-          html = urllib.request.urlopen(req, timeout=60).read().decode("utf-8","ignore")
-          for name in ("bolagsverket_bulkfil.zip","scb_bulkfil.zip"):
-              patterns = [
-                  rf'href="([^"]*{re.escape(name)}[^"]*)"',
-                  rf"href='([^']*{re.escape(name)}[^']*)'",
-                  rf'(https?://[^\s"<>]*{re.escape(name)})'
-              ]
-              url = None
-              for pattern in patterns:
-                  m = re.search(pattern, html, re.I)
-                  if m:
-                      url = urljoin(page, m.group(1))
-                      break
-              if not url:
-                  raise SystemExit("Could not locate " + name + " on official Bolagsverket page")
-              print("Downloading", name, "from", url)
-              urllib.request.urlretrieve(url, "/tmp/" + name)
-          PY
           mkdir -p data/bulk/bolagsverket data/bulk/scb
+          curl -fL --retry 5 --retry-delay 3 --connect-timeout 30 --max-time 600 \
+            "https://vardefulla-datamangder.bolagsverket.se/bolagsverket/bolagsverket_bulkfil.zip" \
+            -o /tmp/bolagsverket_bulkfil.zip
+          curl -fL --retry 5 --retry-delay 3 --connect-timeout 30 --max-time 600 \
+            "https://vardefulla-datamangder.bolagsverket.se/scb/scb_bulkfil.zip" \
+            -o /tmp/scb_bulkfil.zip
           unzip -o /tmp/bolagsverket_bulkfil.zip -d data/bulk/bolagsverket
           unzip -o /tmp/scb_bulkfil.zip -d data/bulk/scb
       - name: Build master CSV
