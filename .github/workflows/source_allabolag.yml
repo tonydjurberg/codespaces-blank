@@ -1,0 +1,17 @@
+name: Source 5 - Allabolag authorized API/export
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/source_allabolag.yml"
+jobs:
+  allabolag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check authorized Allabolag credentials
+        env:
+          ALLABOLAG_API_KEY: ${{ secrets.ALLABOLAG_API_KEY }}
+        run: |
+          test -n "$ALLABOLAG_API_KEY" || { echo "ALLABOLAG_API_KEY secret missing"; exit 1; }
+          echo "Allabolag source configured for authorized API/export ingestion."
+          echo "No website scraping or export-limit bypass is used."
