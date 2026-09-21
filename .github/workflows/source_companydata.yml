@@ -1,0 +1,21 @@
+name: "Source 7 - CompanyData"
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/source_companydata.yml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check CompanyData API
+        env:
+          KEY: ${{ secrets.COMPANYDATA_API_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "COMPANYDATA_API_KEY not configured; source remains available for authorized enrichment."
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/r.json -w "%{http_code}" -H "x-api-key: $KEY" "https://api.companydata.com/api/company/search?search=Volvo&countryCode=SE&pageSize=1")
+          test "$code" = "200"
+          cat /tmp/r.json
