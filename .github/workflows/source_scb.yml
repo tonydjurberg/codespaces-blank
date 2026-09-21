@@ -1,0 +1,26 @@
+name: Source 2 - SCB company register
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/source_scb.yml"
+jobs:
+  scb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check SCB API availability
+        run: |
+          python - <<'PY'
+          import urllib.request
+          urls = [
+            "https://api.scb.se/OV0104/v1/doris/en/ssd/START/START__BE__BE0101__BE0101Y/FBE",
+            "https://www.scb.se/vara-tjanster/bestall-data-och-statistik/foretagsregistret/avgiftsfria-uppgifter-i-foretagsregistret/"
+          ]
+          for u in urls:
+              try:
+                  r=urllib.request.urlopen(u,timeout=30)
+                  print(u, r.status, r.headers.get("content-type"))
+              except Exception as e:
+                  print("CHECK",u,"ERROR",e)
+          PY
