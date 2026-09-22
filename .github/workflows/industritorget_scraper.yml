@@ -1,1 +1,40 @@
-name: Industritorget Sweden scraper\n\non:\n  workflow_dispatch:\n    inputs:\n      country:\n        description: 'Country name/slug, e.g. Sverige, Norge, Finland, Danmark'\n        required: true\n        default: 'Sverige'\n      start_url:\n        description: 'Optional exact Industritorget directory URL; leave blank to use country'\n        required: false\n        default: ''\n      pages:\n        description: 'Number of directory pages to scan'\n        required: true\n        default: '5'\n      delay:\n        description: 'Delay between requests in seconds'\n        required: true\n        default: '0.8'\n\njobs:\n  scrape:\n    runs-on: ubuntu-latest\n    timeout-minutes: 60\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: '3.12'\n      - name: Install dependencies\n        run: pip install -r industritorget_scraper/requirements.txt\n      - name: Run scraper\n        run: python industritorget_scraper/industritorget_scraper.py --country "${{ inputs.country }}" --start-url "${{ inputs.start_url }}" --pages "${{ inputs.pages }}" --delay "${{ inputs.delay }}"\n      - name: Upload CSV results\n        uses: actions/upload-artifact@v4\n        with:\n          name: industritorget-results\n          path: industritorget_scraper/exports/\n
+name: Industritorget Sweden scraper
+
+on:
+  workflow_dispatch:
+    inputs:
+      country:
+        description: 'Country name/slug, e.g. Sverige, Norge, Finland, Danmark'
+        required: true
+        default: 'Sverige'
+      start_url:
+        description: 'Optional exact Industritorget directory URL; leave blank to use country'
+        required: false
+        default: ''
+      pages:
+        description: 'Number of directory pages to scan'
+        required: true
+        default: '5'
+      delay:
+        description: 'Delay between requests in seconds'
+        required: true
+        default: '0.8'
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r industritorget_scraper/requirements.txt
+      - name: Run scraper
+        run: python industritorget_scraper/industritorget_scraper.py --country "${{ inputs.country }}" --start-url "${{ inputs.start_url }}" --pages "${{ inputs.pages }}" --delay "${{ inputs.delay }}"
+      - name: Upload CSV results
+        uses: actions/upload-artifact@v4
+        with:
+          name: industritorget-results
+          path: industritorget_scraper/exports/
