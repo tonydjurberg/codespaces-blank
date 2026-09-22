@@ -1,0 +1,75 @@
+name: Build WhatsApp CRM for Windows
+
+on:
+  push:
+    paths:
+      - "whatsapp-crm/**"
+      - ".github/workflows/build-whatsapp-crm.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: whatsapp-crm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade pip pyinstaller openpyxl
+
+      - name: Syntax check
+        run: python -m py_compile whatsapp_crm.py
+
+      - name: Application self-test
+        run: python whatsapp_crm.py --self-test
+
+      - name: Build EXE
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name WhatsAppCRM whatsapp_crm.py
+
+      - name: Verify EXE exists
+        run: |
+          if (!(Test-Path "dist\WhatsAppCRM.exe")) { throw "WhatsAppCRM.exe was not created." }
+          Get-Item "dist\WhatsAppCRM.exe"
+
+      - name: Create release package
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item "dist\WhatsAppCRM.exe" "package\WhatsAppCRM.exe"
+          @"
+          WhatsApp CRM 2.0
+          
+          Double-click WhatsAppCRM.exe to start.
+          
+          Your customer data is saved in the same folder as the EXE:
+          - whatsapp_crm.db
+          - customers.csv
+          - customers.xlsx
+          - crm_settings.json
+          
+          Use Field settings inside the app to rename fields for your business.
+          "@ | Set-Content -Encoding UTF8 "package\README.txt"
+          Compress-Archive -Path "package\*" -DestinationPath "WhatsAppCRM_Windows_2.0.zip" -Force
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhatsAppCRM-Windows-2.0
+          path: whatsapp-crm/dist/WhatsAppCRM.exe
+          if-no-files-found: error
+
+      - name: Upload ZIP package
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhatsAppCRM-Windows-2.0-package
+          path: whatsapp-crm/WhatsAppCRM_Windows_2.0.zip
+          if-no-files-found: error
