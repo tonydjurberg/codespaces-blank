@@ -1,0 +1,140 @@
+name: Build Simple WhatsApp CRM
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout builder repo
+        uses: actions/checkout@v4
+
+      - name: Checkout Deskcomm source
+        uses: actions/checkout@v4
+        with:
+          repository: thalena-lima/deskcomm
+          ref: main
+          path: source
+
+      - name: Patch Simple WhatsApp CRM
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+          root = Path("source")
+
+          css = root / "app/globals.css"
+          s = css.read_text()
+          replacements = {
+              "--color-bg: #faf9f6;": "--color-bg: #f0f2f5;",
+              "--color-surface-elevated: #f5f3ee;": "--color-surface-elevated: #f7f8fa;",
+              "--color-text: #1c1a16;": "--color-text: #111b21;",
+              "--color-text-muted: #5d594f;": "--color-text-muted: #54656f;",
+              "--color-text-subtle: #7d786c;": "--color-text-subtle: #667781;",
+              "--color-border: #e7e3da;": "--color-border: #d1d7db;",
+              "--color-border-strong: #d2cdbf;": "--color-border-strong: #bfc8cc;",
+              "--color-accent-50:  #f3f6f1;": "--color-accent-50: #e7fce9;",
+              "--color-accent-100: #e4ebe0;": "--color-accent-100: #d9fdd3;",
+              "--color-accent-200: #c8d6c1;": "--color-accent-200: #b7edb0;",
+              "--color-accent-300: #a4ba9a;": "--color-accent-300: #7fe78a;",
+              "--color-accent-400: #82a077;": "--color-accent-400: #25d366;",
+              "--color-accent-500: #67885d;": "--color-accent-500: #20bd5a;",
+              "--color-accent-600: #506d48;": "--color-accent-600: #128c7e;",
+              "--color-accent-700: #41573b;": "--color-accent-700: #075e54;",
+              "--color-accent-800: #374731;": "--color-accent-800: #064c45;",
+              "--color-accent-900: #2f3c2b;": "--color-accent-900: #053d37;",
+              "--color-accent-950: #171f15;": "--color-accent-950: #021f1b;",
+              "--color-accent: var(--color-accent-600);": "--color-accent: #128c7e;",
+              "--color-accent-soft: var(--color-accent-100);": "--color-accent-soft: #d9fdd3;",
+              "--color-accent-hover: var(--color-accent-700);": "--color-accent-hover: #075e54;",
+              "--color-neutral-50:  #faf9f6;": "--color-neutral-50: #f0f2f5;",
+              "--color-neutral-100: #f3f1ec;": "--color-neutral-100: #e9edef;",
+              "--color-neutral-200: #e7e3da;": "--color-neutral-200: #d1d7db;",
+              "--color-neutral-300: #d2cdbf;": "--color-neutral-300: #bfc8cc;",
+              "--color-neutral-400: #a9a395;": "--color-neutral-400: #8696a0;",
+              "--color-neutral-500: #7d786c;": "--color-neutral-500: #667781;",
+              "--color-neutral-600: #5d594f;": "--color-neutral-600: #54656f;",
+              "--color-neutral-700: #46433b;": "--color-neutral-700: #3b4a54;",
+              "--color-neutral-800: #2e2c26;": "--color-neutral-800: #263238;",
+              "--color-neutral-900: #1c1a16;": "--color-neutral-900: #111b21;",
+          }
+          for a,b in replacements.items():
+              s = s.replace(a,b)
+          css.write_text(s)
+
+          # Strip the obvious AI-only imports and keep the manual CRM flow.
+          for rel in [
+              "components/inbox/ConversationList.tsx",
+              "components/inbox/InboxLayout.tsx",
+              "components/inbox/ConversationHeader.tsx",
+          ]:
+              p = root / rel
+              if not p.exists():
+                  continue
+              t = p.read_text()
+              t = re.sub(r'import\s*\{\s*useAutomaticoAtivo\s*\}\s*from\s*"@/hooks/ai/useAutomaticoAtivo";\s*', '', t)
+              t = re.sub(r'import\s*\{\s*usePauseAiAttendance\s*,\s*useResumeAiAttendance\s*\}\s*from\s*"@/hooks/inbox/[^"]+";\s*', '', t)
+              t = t.replace("useAutomaticoAtivo()", "({ data: false })")
+              p.write_text(t)
+
+          p = root / "components/inbox/Composer.tsx"
+          if p.exists():
+              t = p.read_text()
+              t = re.sub(r'import\s+\{\s*ReplyReviewPanel\s*\}\s+from\s+"[^"]+";\s*', '', t)
+              t = re.sub(r'\n\s*<ReplyReviewPanel[\s\S]*?</ReplyReviewPanel>\s*', '\n', t)
+              p.write_text(t)
+
+          p = root / "components/connections/ConnectionsClient.tsx"
+          if p.exists():
+              t = p.read_text()
+              t = re.sub(r'import\s+\{\s*ChannelAiAccess\s*\}\s+from\s+"[^"]+";\s*', '', t)
+              t = re.sub(r'import\s+\{\s*usePacingKnobs\s*\}\s+from\s+"[^"]+";\s*', '', t)
+              t = re.sub(r'import\s+\{\s*AntiBanSheet\s*\}\s+from\s+"[^"]+";\s*', '', t)
+              p.write_text(t)
+
+          pkgp = root / "package.json"
+          pkg = json.loads(pkgp.read_text())
+          for dep in ["@ai-sdk/anthropic","@ai-sdk/google","@ai-sdk/openai","@modelcontextprotocol/sdk","ai","gpt-tokenizer"]:
+              pkg.get("dependencies", {}).pop(dep, None)
+          for key in ["worker","dev:crons","flywheel:judge"]:
+              pkg.get("scripts", {}).pop(key, None)
+          pkg["name"] = "deskcomm-simple-whatsapp-crm"
+          pkg["description"] = "Simple WhatsApp CRM: contacts, conversations, products, sales, agenda and company settings."
+          pkgp.write_text(json.dumps(pkg, ensure_ascii=False, indent=2) + "\n")
+
+          (root / "SIMPLE-WHATSAPP-CRM.md").write_text("""# Simple WhatsApp CRM
+Keeps the existing Deskcomm UI for WhatsApp/CRM/Agenda and strips the AI-oriented product experience.
+""", encoding="utf-8")
+          PY
+
+      - name: Install dependencies
+        working-directory: source
+        run: corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --no-frozen-lockfile
+
+      - name: Build
+        working-directory: source
+        run: pnpm build
+
+      - name: Package
+        shell: bash
+        run: |
+          rm -rf dist && mkdir -p dist
+          cp -R source dist/deskcomm-simple-whatsapp-crm
+          rm -rf dist/deskcomm-simple-whatsapp-crm/node_modules
+          rm -rf dist/deskcomm-simple-whatsapp-crm/.next/cache
+          cd dist
+          zip -r deskcomm-simple-whatsapp-crm.zip deskcomm-simple-whatsapp-crm >/dev/null
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deskcomm-simple-whatsapp-crm
+          path: dist/deskcomm-simple-whatsapp-crm.zip
+          retention-days: 14
