@@ -14,21 +14,24 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate WhatsApp CRM
         run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const html = fs.readFileSync('whatsapp-crm/index.html', 'utf8');
-          const scripts = [...html.matchAll(/<script(?:[^>]*)>([\\s\\S]*?)<\\/script>/g)].map(m => m[1]);
-          if (!scripts.length) throw new Error('No inline script found');
-          for (const script of scripts) {
-            new Function(script);
-          }
-          const required = [
-            'Novo cliente','Nova mensagem','Nova compra','Novo lembrete',
-            'Petshop','WhatsApp','localStorage','Conversas','Clientes',
-            'Lembretes','Automação','Configurações'
-          ];
-          const missing = required.filter(x => !html.includes(x));
-          if (missing.length) throw new Error('Missing required CRM elements: ' + missing.join(', '));
-          console.log('WhatsApp CRM validation: OK');
-          console.log('Inline scripts:', scripts.length);
-          NODE
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("whatsapp-crm/index.html").read_text(encoding="utf-8")
+          scripts = re.findall(r"<script(?:[^>]*)>(.*?)</script>", html, flags=re.S|re.I)
+          if not scripts:
+              raise SystemExit("No inline script found")
+          Path("/tmp/crm.js").write_text("\n".join(scripts), encoding="utf-8")
+          required = [
+              "Novo cliente","Nova mensagem","Nova compra","Novo lembrete",
+              "Petshop","WhatsApp","localStorage","Conversas","Clientes",
+              "Lembretes","Automação","Configurações"
+          ]
+          missing = [x for x in required if x not in html]
+          if missing:
+              raise SystemExit("Missing required CRM elements: " + ", ".join(missing))
+          print("WhatsApp CRM HTML validation: OK")
+          print("Inline scripts:", len(scripts))
+          PY
+          node --check /tmp/crm.js
+          echo "WhatsApp CRM JavaScript syntax: OK"
