@@ -51,7 +51,11 @@ class App(tk.Tk):
         os.startfile(p) if sys.platform.startswith("win") else subprocess.Popen(["xdg-open",p])
 
     def write(self,s):
-        self.log.insert("end",s+"\n"); self.log.see("end")
+        self.after(0, self._write, s)
+
+    def _write(self,s):
+        self.log.insert("end",s+"\n")
+        self.log.see("end")
 
     def start(self):
         p=self.result_dir.get().strip()
@@ -63,9 +67,11 @@ class App(tk.Tk):
 
     def worker(self):
         try:
-            root=os.path.dirname(os.path.abspath(sys.argv[0]))
-            script=os.path.join(root,"industritorget_scraper.py")
-            cmd=[sys.executable,script,"--country",self.country.get().strip(),"--pages",str(self.pages.get()),"--delay",str(self.delay.get()),"--out",self.result_dir.get()]
+            root=os.path.dirname(os.path.abspath(sys.executable if getattr(sys,"frozen",False) else sys.argv[0]))
+            engine=os.path.join(root,"industritorget_scraper.exe" if getattr(sys,"frozen",False) else "industritorget_scraper.py")
+            cmd=[engine,"--country",self.country.get().strip(),"--pages",str(self.pages.get()),"--delay",str(self.delay.get()),"--out",self.result_dir.get()]
+            if not getattr(sys,"frozen",False):
+                cmd=[sys.executable]+cmd
             if self.start_url.get().strip(): cmd += ["--start-url",self.start_url.get().strip()]
             self.write("Starting scraper…")
             self.write("Country: "+self.country.get())
@@ -77,14 +83,16 @@ class App(tk.Tk):
             rc=p.wait()
             if rc==0:
                 self.write("DONE. CSV files are in the selected results folder.")
-                messagebox.showinfo("Finished","Scraping finished. Results were saved to the selected folder.")
+                self.after(0, lambda: messagebox.showinfo("Finished","Scraping finished. Results were saved to the selected folder."))
             else:
                 self.write("Scraper exited with code "+str(rc))
-                messagebox.showerror("Scraper error","The scraper stopped with an error. Check the log.")
+                self.after(0, lambda: messagebox.showerror("Scraper error","The scraper stopped with an error. Check the log."))
         except Exception as e:
-            self.write("ERROR: "+repr(e)); messagebox.showerror("Error",str(e))
+            self.write("ERROR: "+repr(e))
+            self.after(0, lambda: messagebox.showerror("Error",str(e)))
         finally:
-            self.progress.stop(); self.run_btn.config(state="normal")
+            self.after(0, self.progress.stop)
+            self.after(0, lambda: self.run_btn.config(state="normal"))
 
 if __name__=="__main__":
     App().mainloop()
