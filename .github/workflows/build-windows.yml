@@ -2,8 +2,10 @@ name: Build Windows EXE
 
 on:
   push:
+    branches: ["gmaps-scraper"]
     paths:
-      - "google_maps_maklarscraper.py"
+      - "GoogleMapsScraper.py"
+      - "requirements.txt"
       - ".github/workflows/build-windows.yml"
   workflow_dispatch:
 
@@ -11,26 +13,41 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Syntax check
+        run: python -m py_compile GoogleMapsScraper.py
+
       - name: Build EXE
-        run: pyinstaller --noconfirm --clean --onefile --windowed --name MaklarScraper_v1 google_maps_maklarscraper.py
+        run: pyinstaller --noconfirm --clean --onefile --windowed --name GoogleMapsScraper GoogleMapsScraper.py
+
       - name: Smoke test
         shell: pwsh
         run: |
-          if (-not (Test-Path "dist\\MaklarScraper_v1.exe")) { throw "EXE was not created" }
+          if (-not (Test-Path "dist\GoogleMapsScraper.exe")) { throw "EXE was not created" }
+
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
-          Copy-Item "dist\\MaklarScraper_v1.exe" "package\\MaklarScraper_v1.exe"
-          Copy-Item "README.md" "package\\README.md"
-          Compress-Archive -Path "package\\*" -DestinationPath "MaklarScraper_v1_Windows.zip" -Force
-      - uses: actions/upload-artifact@v4
+          Copy-Item "dist\GoogleMapsScraper.exe" "package\GoogleMapsScraper.exe"
+          Copy-Item "README.md" "package\README.md"
+          Compress-Archive -Path "package\*" -DestinationPath "GoogleMapsScraper_Windows.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: MaklarScraper_v1_Windows
-          path: MaklarScraper_v1_Windows.zip
+          name: GoogleMapsScraper-Windows
+          path: GoogleMapsScraper_Windows.zip
