@@ -17,12 +17,15 @@ jobs:
           python-version: "3.12"
       - name: Install Python packages
         run: python -m pip install -r industritorget_scraper/requirements.txt pyinstaller
+      - name: Build scraper engine EXE
+        working-directory: industritorget_scraper
+        run: pyinstaller --noconfirm --clean --onefile --console --name industritorget_scraper industritorget_scraper.py
       - name: Build GUI EXE
         working-directory: industritorget_scraper
         run: pyinstaller --noconfirm --clean --onedir --windowed --name IndustritorgetScraper IndustritorgetScraper.py
-      - name: Add scraper engine
+      - name: Add scraper engine EXE
         shell: pwsh
-        run: Copy-Item industritorget_scraper/industritorget_scraper.py industritorget_scraper/dist/IndustritorgetScraper/industritorget_scraper.py
+        run: Copy-Item industritorget_scraper/dist/industritorget_scraper.exe industritorget_scraper/dist/IndustritorgetScraper/industritorget_scraper.exe
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
       - name: Build installer
