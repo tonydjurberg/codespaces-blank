@@ -35,3 +35,14 @@ jobs:
           PY
           node --check /tmp/crm.js
           echo "WhatsApp CRM JavaScript syntax: OK"
+      - name: Package CRM ZIP
+        run: |
+          mkdir -p dist/whatsapp-crm
+          cp -R whatsapp-crm/. dist/whatsapp-crm/
+          zip -r whatsapp-crm-test.zip dist/whatsapp-crm
+      - name: Upload CRM ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: whatsapp-crm-test
+          path: whatsapp-crm-test.zip
+          if-no-files-found: error
