@@ -1,5 +1,6 @@
 import csv
 import re
+import sys
 import time
 from pathlib import Path
 from urllib.parse import quote, urljoin
@@ -7,7 +8,7 @@ from playwright.sync_api import sync_playwright
 
 BASE = "https://www.eniro.se/privatpersoner"
 OUT = Path("eniro_private_people.csv")
-QUERY = "Stockholm"
+QUERY = sys.argv[1].strip() if len(sys.argv) > 1 and sys.argv[1].strip() else "Stockholm"
 MAX_PAGES = 200
 FIELDS = ["first_name","last_name","full_name","address","postcode","city","phone","profile_url","source"]
 
@@ -70,8 +71,8 @@ def parse_card(card):
 
 def main():
     rows = load_existing()
+    print(f"SEARCH: {QUERY}")
     with sync_playwright() as p:
-        # GitHub Actions has no X server, so run headless there.
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1440, "height": 900})
         for n in range(1, MAX_PAGES + 1):
