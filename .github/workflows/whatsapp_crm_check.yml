@@ -13,20 +13,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check HTML and required CRM features
+        shell: bash
         run: |
-          node --check <(python3 - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
           import re
           html = Path("whatsapp-crm/index.html").read_text(encoding="utf-8")
-          m = re.search(r"<script>([\\s\\S]*?)</script>", html)
-          if not m:
+          scripts = re.findall(r"<script(?:[^>]*)>([\\s\\S]*?)</script>", html)
+          if not scripts:
               raise SystemExit("No inline script found")
-          print(m.group(1))
-          PY
-          )
-          python3 - <<'PY'
-          from pathlib import Path
-          html = Path("whatsapp-crm/index.html").read_text(encoding="utf-8")
+          Path("/tmp/crm.js").write_text("\n".join(scripts), encoding="utf-8")
           required = [
             "Novo cliente","Nova mensagem","Nova compra","Novo lembrete",
             "Petshop","WhatsApp","localStorage","Conversas","Clientes",
@@ -35,5 +31,8 @@ jobs:
           missing = [x for x in required if x not in html]
           if missing:
               raise SystemExit("Missing required CRM elements: " + ", ".join(missing))
-          print("WhatsApp CRM structural check: OK")
+          print("HTML structure: OK")
+          print("Inline scripts found:", len(scripts))
           PY
+          node --check /tmp/crm.js
+          echo "WhatsApp CRM JavaScript syntax: OK"
