@@ -1,0 +1,39 @@
+name: WhatsApp CRM Check
+
+on:
+  push:
+    paths:
+      - "whatsapp-crm/**"
+      - ".github/workflows/whatsapp_crm_check.yml"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check HTML and required CRM features
+        run: |
+          node --check <(python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("whatsapp-crm/index.html").read_text(encoding="utf-8")
+          m = re.search(r"<script>([\\s\\S]*?)</script>", html)
+          if not m:
+              raise SystemExit("No inline script found")
+          print(m.group(1))
+          PY
+          )
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path("whatsapp-crm/index.html").read_text(encoding="utf-8")
+          required = [
+            "Novo cliente","Nova mensagem","Nova compra","Novo lembrete",
+            "Petshop","WhatsApp","localStorage","Conversas","Clientes",
+            "Lembretes","Automação","Configurações"
+          ]
+          missing = [x for x in required if x not in html]
+          if missing:
+              raise SystemExit("Missing required CRM elements: " + ", ".join(missing))
+          print("WhatsApp CRM structural check: OK")
+          PY
