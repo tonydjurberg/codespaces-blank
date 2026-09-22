@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -138,3 +138,15 @@ Keeps the existing Deskcomm UI for WhatsApp/CRM/Agenda and strips the AI-oriente
           name: deskcomm-simple-whatsapp-crm
           path: dist/deskcomm-simple-whatsapp-crm.zip
           retention-days: 14
+
+      - name: Publish build package to builder repo
+        shell: bash
+        run: |
+          cp dist/deskcomm-simple-whatsapp-crm.zip deskcomm-simple-whatsapp-crm.zip
+          printf 'BUILD_OK %s\\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > BUILD_OK.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deskcomm-simple-whatsapp-crm.zip BUILD_OK.txt
+          git diff --cached --quiet && exit 0
+          git commit -m "Build Simple WhatsApp CRM [skip ci]"
+          git push origin HEAD:main
