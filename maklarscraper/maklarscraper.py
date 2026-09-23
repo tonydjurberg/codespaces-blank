@@ -83,7 +83,7 @@ def make_driver(headless=False):
 
     # Dedicated Chrome profile: the normal Booli login/security session survives
     # between runs without touching the user's normal Chrome profile.
-    profile_root = Path(os.getenv("LOCALAPPDATA", str(Path.home()))) / "MaklarScraper_v2" / "ChromeProfile"
+    profile_root = Path(os.getenv("LOCALAPPDATA", str(Path.home()))) / "BooliMaklarScraper" / "browser_profile"
     profile_root.mkdir(parents=True, exist_ok=True)
     options.add_argument(f"--user-data-dir={profile_root}")
 
