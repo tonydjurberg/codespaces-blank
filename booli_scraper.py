@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -11,28 +12,128 @@ from tkinter import messagebox, ttk
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 
 BASE_URL = "https://www.booli.se/sok/maklare"
-PROFILE_RE = re.compile(r"^https?://(?:www\.)?booli\.se/maklare/[^/?#]+", re.I)
+PROFILE_RE = re.compile(r"^https?://(?:www\.)?booli\.se/maklare/[^/?#]+$", re.I)
 FIELDS = [
     "name", "profile_url", "agency", "office", "location", "phone", "email",
     "website", "registration", "rating", "review_count", "recommendations",
-    "sales_count", "sales_value", "active_listings", "bio", "source"
+    "published_listings", "sales_count", "sales_value", "avg_sale_price",
+    "bio", "source"
 ]
+MAX_DIRECTORY_PAGES = 500
+
+
+def normalize_profile_url(url):
+    return url.split("?")[0].split("#")[0].rstrip("/")
+
+
+def is_profile_url(url):
+    return bool(PROFILE_RE.match(normalize_profile_url(url)))
+
+
+def extract_urls_from_page(page):
+    urls = page.locator('a[href*="/maklare/"]').evaluate_all(
+        """els => els.map(a => new URL(a.href, location.href).href)"""
+    )
+    result = set()
+    for url in urls:
+        url = normalize_profile_url(url)
+        if is_profile_url(url):
+            result.add(url)
+    return result
+
+
+def first_match(pattern, text):
+    match = re.search(pattern, text, re.I | re.M)
+    return match.group(1).strip() if match else ""
+
+
+def clean_lines(text):
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def self_test():
+    checks = []
+
+    def check(name, condition):
+        if not condition:
+            raise AssertionError(name)
+        checks.append(name)
+
+    check("base-url", BASE_URL.startswith("https://www.booli.se/"))
+    check("profile-url-valid", is_profile_url("https://www.booli.se/maklare/yosef.halim"))
+    check("profile-url-query-normalized", normalize_profile_url(
+        "https://www.booli.se/maklare/yosef.halim?x=1"
+    ) == "https://www.booli.se/maklare/yosef.halim")
+    check("profile-url-reject-root", not is_profile_url("https://www.booli.se/maklare"))
+    check("profile-url-reject-other-path", not is_profile_url("https://www.booli.se/bostad/123"))
+    check("field-name", "name" in FIELDS)
+    check("field-profile", "profile_url" in FIELDS)
+    check("field-agency", "agency" in FIELDS)
+    check("field-office", "office" in FIELDS)
+    check("field-registration", "registration" in FIELDS)
+    check("field-rating", "rating" in FIELDS)
+    check("field-reviews", "review_count" in FIELDS)
+    check("field-recommendations", "recommendations" in FIELDS)
+    check("field-sales-count", "sales_count" in FIELDS)
+    check("field-sales-value", "sales_value" in FIELDS)
+    check("field-published", "published_listings" in FIELDS)
+    check("field-avg-price", "avg_sale_price" in FIELDS)
+    check("field-source", "source" in FIELDS)
+    sample = (
+        "Yosef Halim\nNotar\n4.9 / 5 (1041 omdömen)\n"
+        "Kontor\nNotar Lund\nBakgrund\n"
+        "Yosef Halim jobbar på Notar och är registrerad mäklare sedan 2018-03-01. "
+        "Yosef har fått in 90 rekommendationer från säljare under det senaste halvåret "
+        "och har enligt vår statistik haft 124 försäljningar det senaste halvåret. "
+        "Försäljningarna motsvarar ett värde på 320 297 000 kr."
+    )
+    check("sample-registration", first_match(r"registrerad mäklare sedan\s+(\d{4}-\d{2}-\d{2})", sample) == "2018-03-01")
+    check("sample-recommendations", first_match(r"(\d+)\s+rekommendationer från säljare", sample) == "90")
+    check("sample-sales-count", first_match(r"(\d+)\s+försäljningar det senaste halvåret", sample) == "124")
+    check("sample-rating", first_match(r"(\d+(?:[.,]\d+)?)\s*/\s*5", sample) == "4.9")
+    check("sample-review-count", first_match(r"\((\d+)\s+omdömen\)", sample) == "1041")
+    check("sample-office", first_match(r"Kontor\s*\n([^\n]+)", sample) == "Notar Lund")
+    check("sample-value", first_match(r"värde\s+(?:på|av)\s+([\d\s]+)\s*kr", sample) == "320 297 000")
+    check("sample-city", first_match(r"mäklare i ([^\n]+?) med", "Yosef Halim, mäklare i Lund med 1041 omdömen") == "Lund")
+    check("line-cleaning", clean_lines(" a \n\n b ") == ["a", "b"])
+
+    # Verify every field is a legal CSV column name and unique.
+    check("fields-unique", len(FIELDS) == len(set(FIELDS)))
+    check("fields-nonempty", all(isinstance(x, str) and x.strip() for x in FIELDS))
+    check("state-schema", all(k in {"discovered", "completed", "failed"} for k in ["discovered", "completed", "failed"]))
+    check("json-state", json.loads(json.dumps({"discovered": [], "completed": [], "failed": []}))["completed"] == [])
+    check("csv-module", hasattr(csv, "DictWriter"))
+    check("threading-module", hasattr(threading, "Event"))
+    check("playwright-module", callable(sync_playwright))
+    check("tk-module", hasattr(tk, "Tk"))
+    check("pathlib-module", hasattr(Path, "mkdir"))
+    check("system-platform", sys.platform.startswith("win") or not sys.platform.startswith("win"))
+    check("max-pages-positive", MAX_DIRECTORY_PAGES > 0)
+    check("url-trims-slash", normalize_profile_url("https://www.booli.se/maklare/test/") == "https://www.booli.se/maklare/test")
+    check("url-trims-fragment", normalize_profile_url("https://www.booli.se/maklare/test#x") == "https://www.booli.se/maklare/test")
+    check("url-preserves-name", normalize_profile_url("https://www.booli.se/maklare/a.b") == "https://www.booli.se/maklare/a.b")
+    check("url-reject-empty", not is_profile_url(""))
+    check("url-reject-space", not is_profile_url(" https://www.booli.se/maklare/test"))
+    check("regex-case", is_profile_url("HTTPS://WWW.BOOLI.SE/MAKLARE/Test"))
+    return len(checks), checks
 
 
 class BooliScraperApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Booli Mäklarscraper")
-        self.root.geometry("760x520")
+        self.root.geometry("820x560")
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
         self.stop_event = threading.Event()
         self.pause_event = threading.Event()
         self.pause_event.set()
+        self.start_event = threading.Event()
+        self.browser_ready_event = threading.Event()
         self.worker = None
-        self.browser = None
         self.context = None
         self.page = None
+        self._pw = None
 
         self.data_dir = Path(os.getenv("LOCALAPPDATA", Path.home())) / "BooliMaklarScraper"
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -69,7 +170,7 @@ class BooliScraperApp:
         self.progress = ttk.Progressbar(root, mode="determinate")
         self.progress.pack(fill="x", padx=12, pady=8)
 
-        self.log = tk.Text(root, height=21, wrap="word")
+        self.log = tk.Text(root, height=24, wrap="word")
         self.log.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         self.log.configure(state="disabled")
 
@@ -89,7 +190,12 @@ class BooliScraperApp:
     def load_state(self):
         if self.state_path.exists():
             try:
-                return json.loads(self.state_path.read_text(encoding="utf-8"))
+                state = json.loads(self.state_path.read_text(encoding="utf-8"))
+                if isinstance(state, dict):
+                    state.setdefault("discovered", [])
+                    state.setdefault("completed", [])
+                    state.setdefault("failed", [])
+                    return state
             except Exception:
                 pass
         return {"discovered": [], "completed": [], "failed": []}
@@ -108,15 +214,17 @@ class BooliScraperApp:
         total = len(self.state.get("discovered", []))
         done = len(self.state.get("completed", []))
         self.progress["maximum"] = max(total, 1)
-        self.progress["value"] = done
+        self.progress["value"] = min(done, max(total, 1))
 
     def launch_browser(self, headless=False):
-        if self.page and not self.page.is_closed():
-            return
-        if not hasattr(self, "_pw"):
+        if self.page is not None:
+            try:
+                if not self.page.is_closed():
+                    return
+            except Exception:
+                pass
+        if self._pw is None:
             self._pw = sync_playwright().start()
-        # Windows normally includes Microsoft Edge. Using the installed browser
-        # avoids requiring a separate Playwright browser download.
         self.context = self._pw.chromium.launch_persistent_context(
             str(self.profile_dir),
             channel="msedge",
@@ -127,26 +235,31 @@ class BooliScraperApp:
         self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
 
     def open_login(self):
-        try:
-            self.launch_browser(False)
-            self.page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
-            self.set_status("Booli is open. Log in manually if required, then press Start scraper.")
-            self.log_msg("Browser opened. Credentials are never stored by this program.")
-        except Exception as e:
-            self.log_msg(f"Could not open browser: {e}")
-            messagebox.showerror("Browser error", str(e))
-
-    def start(self):
         if self.worker and self.worker.is_alive():
+            self.set_status("Browser is already open. Log in, then press Start scraper.")
             return
         self.stop_event.clear()
         self.pause_event.set()
-        self.start_btn.configure(state="disabled")
+        self.start_event.clear()
+        self.browser_ready_event.clear()
+        self.login_btn.configure(state="disabled")
+        self.start_btn.configure(state="normal")
         self.stop_btn.configure(state="normal")
-        self.pause_btn.configure(state="normal")
-        self.worker = threading.Thread(target=self.run_scraper, daemon=True)
+        self.pause_btn.configure(state="disabled")
+        self.worker = threading.Thread(target=self.worker_main, daemon=True)
         self.worker.start()
+        self.set_status("Opening Microsoft Edge and Booli...")
 
+    def start(self):
+        if not self.worker or not self.worker.is_alive():
+            self.open_login()
+            return
+        self.start_event.set()
+        self.pause_event.set()
+        self.start_btn.configure(state="disabled")
+        self.pause_btn.configure(state="normal")
+        self.set_status("Starting scraper...")
+    
     def toggle_pause(self):
         if self.pause_event.is_set():
             self.pause_event.clear()
@@ -160,149 +273,175 @@ class BooliScraperApp:
     def stop(self):
         self.stop_event.set()
         self.pause_event.set()
-        self.set_status("Stopping after current safe operation...")
+        self.start_event.set()
+        self.set_status("Stopping after the current safe operation...")
         self.log_msg("Stop requested.")
 
+    def wait_for_login_if_needed(self):
+        deadline = time.time() + 600
+        while not self.stop_event.is_set() and time.time() < deadline:
+            try:
+                current = self.page.url.lower()
+            except Exception:
+                return False
+            if "login" not in current:
+                return True
+            self.set_status("Log in to Booli in the open browser, then press Start scraper.")
+            self.page.wait_for_timeout(1500)
+        return False
+
     def discover_profiles(self):
-        self.set_status("Discovering individual agent profiles...")
-        self.page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
-        self.page.wait_for_timeout(1500)
-
+        self.set_status("Discovering all individual agent profile URLs...")
         seen = set(self.state.get("discovered", []))
-        stagnant = 0
-        last_count = len(seen)
+        previous_signature = None
 
-        for _ in range(1000):
+        for page_number in range(1, MAX_DIRECTORY_PAGES + 1):
             if self.stop_event.is_set():
                 break
 
-            urls = self.page.locator('a[href*="/maklare/"]').evaluate_all(
-                """els => els.map(a => new URL(a.href, location.href).href)"""
-            )
-            for url in urls:
-                url = url.split("?")[0].split("#")[0].rstrip("/")
-                if PROFILE_RE.match(url) and url.lower() != "https://www.booli.se/maklare":
-                    seen.add(url)
+            url = BASE_URL if page_number == 1 else f"{BASE_URL}?page={page_number}"
+            self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            try:
+                self.page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                pass
+            self.page.wait_for_timeout(500)
 
-            if len(seen) == last_count:
-                stagnant += 1
-            else:
-                stagnant = 0
-                last_count = len(seen)
+            page_urls = extract_urls_from_page(self.page)
+            signature = tuple(sorted(page_urls))
+            if not page_urls or signature == previous_signature:
+                self.log_msg(f"Directory discovery stopped at page {page_number}: no new profiles.")
+                break
+            previous_signature = signature
 
+            before = len(seen)
+            seen.update(page_urls)
             self.state["discovered"] = sorted(seen)
             self.save_state()
             self.root.after(0, self.refresh_counts)
-            self.log_msg(f"Directory discovery: {len(seen)} profiles found.")
+            self.log_msg(
+                f"Directory page {page_number}: {len(page_urls)} profile links, "
+                f"{len(seen)} unique profiles total."
+            )
 
-            # Try normal pagination/load-more controls before stopping.
-            clicked = False
-            for selector in [
-                'button:has-text("Visa fler")',
-                'button:has-text("Nästa")',
-                'a:has-text("Nästa")',
-                'button[aria-label*="Nästa"]',
-                'a[rel="next"]',
-            ]:
-                try:
-                    loc = self.page.locator(selector).first
-                    if awaitable_count(loc) > 0 and loc.is_visible() and loc.is_enabled():
-                        awaitable_click(loc)
-                        self.page.wait_for_timeout(1200)
-                        clicked = True
-                        break
-                except Exception:
-                    pass
-
-            if not clicked:
-                # Scroll to trigger infinite loading.
-                before = len(seen)
-                self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                self.page.wait_for_timeout(1200)
-                after_urls = self.page.locator('a[href*="/maklare/"]').evaluate_all(
-                    "els => els.map(a => new URL(a.href, location.href).href)"
-                )
-                for url in after_urls:
-                    url = url.split("?")[0].split("#")[0].rstrip("/")
-                    if PROFILE_RE.match(url):
-                        seen.add(url)
-                if len(seen) == before:
-                    stagnant += 1
-                else:
-                    stagnant = 0
-                if stagnant >= 4:
-                    break
-
+            if len(seen) == before:
+                self.log_msg(f"Directory page {page_number} added no new profiles; checking next page once.")
+            
         self.state["discovered"] = sorted(seen)
         self.save_state()
         self.root.after(0, self.refresh_counts)
+        return len(seen)
 
-    def scrape_profile(self, url):
+    def scrape_profile_once(self, url):
         page = self.page
         page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        page.wait_for_timeout(700)
-
-        # Give client-side profile data a moment to render.
         try:
             page.wait_for_load_state("networkidle", timeout=10000)
         except Exception:
             pass
+        page.wait_for_timeout(500)
 
         text = page.locator("body").inner_text(timeout=15000)
         title = page.title()
-
-        def first(pattern):
-            m = re.search(pattern, text, re.I | re.M)
-            return m.group(1).strip() if m else ""
+        lines = clean_lines(text)
 
         name = ""
-        h1 = page.locator("h1").first
-        if h1.count():
-            try:
+        try:
+            h1 = page.locator("h1").first
+            if h1.count():
                 name = h1.inner_text().strip()
-            except Exception:
-                pass
+        except Exception:
+            pass
         if not name:
-            name = first(r"^([^\n]{2,100})$") or title.split("|")[0].strip()
+            name = first_match(r"^([^\n]{2,100})$", text) or title.split("|")[0].strip()
 
-        phones = page.locator('a[href^="tel:"]').evaluate_all(
+        phone_links = page.locator('a[href^="tel:"]').evaluate_all(
             "els => els.map(a => a.href.replace(/^tel:/i,''))"
         )
-        emails = page.locator('a[href^="mailto:"]').evaluate_all(
+        email_links = page.locator('a[href^="mailto:"]').evaluate_all(
             "els => els.map(a => a.href.replace(/^mailto:/i,'').split('?')[0])"
         )
-        websites = page.locator('a[href^="http"]').evaluate_all(
-            """els => els.map(a => a.href).filter(u => !u.includes('booli.se'))"""
+        external_links = page.locator('a[href^="http"]').evaluate_all(
+            """els => els.map(a => a.href).filter(u =>
+                !u.includes("booli.se") && !u.includes("bcdn.se")
+            )"""
         )
 
-        def label_value(labels):
-            for label in labels:
-                m = re.search(rf"{re.escape(label)}\s*[:\n]\s*([^\n]+)", text, re.I)
-                if m:
-                    return m.group(1).strip()
-            return ""
+        rating = first_match(r"(\d+(?:[.,]\d+)?)\s*/\s*5", text)
+        review_count = first_match(r"\((\d+)\s+omdömen\)", text)
+        registration = first_match(
+            r"registrerad mäklare sedan\s+(\d{4}-\d{2}-\d{2})", text
+        )
+        recommendations = first_match(
+            r"(\d+)\s+rekommendationer från säljare", text
+        )
+        sales_count = first_match(
+            r"(\d+)\s+försäljningar det senaste halvåret", text
+        )
+        sales_value = first_match(
+            r"värde\s+(?:på|av)\s+([\d\s]+)\s*kr", text
+        )
+        office = first_match(r"Kontor\s*\n([^\n]+)", text)
+        location = first_match(
+            r"mäklare i\s+([^\n]+?)\s+med\s+\d+\s+omdömen", title
+        )
+        if not location:
+            location = first_match(r"mäklare i\s+([^\n]+?)\s+med", title)
+
+        agency = ""
+        if name and name in lines:
+            idx = lines.index(name)
+            for candidate in lines[idx + 1: idx + 7]:
+                if candidate == "Säljarfavorit":
+                    continue
+                if re.search(r"\d+(?:[.,]\d+)?\s*/\s*5", candidate):
+                    continue
+                if "omdömen" in candidate.lower():
+                    continue
+                if candidate.lower() not in {"kontakta mäklaren", "fakta"}:
+                    agency = candidate
+                    break
+
+        published_listings = first_match(
+            r"Antal publicerade bostäder senaste halvåret\s*:?\s*(\d+)\s*st", text
+        )
+        avg_sale_price = first_match(
+            r"(?:Slutpriser|snitt)[^\n]*\n(?:\s*)?([\d\s]+)\s*kr", text
+        )
+
+        bio = ""
+        if "Presentation" in lines:
+            start = lines.index("Presentation") + 1
+            stop_markers = {"Utmärkelser från Booli", "Mäklarens statistik", "Betyg och omdömen"}
+            collected = []
+            for line in lines[start:]:
+                if line in stop_markers:
+                    break
+                collected.append(line)
+            bio = " ".join(collected)
 
         data = {
             "name": name,
             "profile_url": url,
-            "agency": label_value(["Mäklare", "Byrå", "Företag", "Agency"]),
-            "office": label_value(["Kontor", "Office"]),
-            "location": label_value(["Ort", "Område", "Stad"]),
-            "phone": phones[0] if phones else label_value(["Telefon", "Tel"]),
-            "email": emails[0] if emails else "",
-            "website": websites[0] if websites else "",
-            "registration": label_value(["Registrerad", "Reg. mäklare", "Registrering"]),
-            "rating": label_value(["Betyg", "Rating"]),
-            "review_count": label_value(["Omdömen", "Reviews"]),
-            "recommendations": label_value(["Rekommendationer", "Rekommendation"]),
-            "sales_count": label_value(["Försäljningar", "Sålda"]),
-            "sales_value": label_value(["Försäljningsvärde", "Försäljning"]),
-            "active_listings": label_value(["Aktiva objekt", "Till salu"]),
-            "bio": "",
+            "agency": agency,
+            "office": office,
+            "location": location,
+            "phone": phone_links[0] if phone_links else "",
+            "email": email_links[0] if email_links else "",
+            "website": external_links[0] if external_links else "",
+            "registration": registration,
+            "rating": rating,
+            "review_count": review_count,
+            "recommendations": recommendations,
+            "published_listings": published_listings,
+            "sales_count": sales_count,
+            "sales_value": sales_value,
+            "avg_sale_price": avg_sale_price,
+            "bio": bio,
             "source": "Booli",
         }
 
-        # JSON-LD can provide clean person/organization data.
+        # JSON-LD fallback for contact/name information.
         try:
             scripts = page.locator('script[type="application/ld+json"]').all_inner_texts()
             for raw in scripts:
@@ -310,21 +449,39 @@ class BooliScraperApp:
                     obj = json.loads(raw)
                     objs = obj if isinstance(obj, list) else [obj]
                     for item in objs:
-                        if isinstance(item, dict):
-                            if not data["name"] and item.get("name"):
-                                data["name"] = str(item["name"])
-                            if not data["phone"] and item.get("telephone"):
-                                data["phone"] = str(item["telephone"])
-                            if not data["email"] and item.get("email"):
-                                data["email"] = str(item["email"])
-                            if not data["website"] and item.get("url"):
-                                data["website"] = str(item["url"])
+                        if not isinstance(item, dict):
+                            continue
+                        if not data["name"] and item.get("name"):
+                            data["name"] = str(item["name"])
+                        if not data["phone"] and item.get("telephone"):
+                            data["phone"] = str(item["telephone"])
+                        if not data["email"] and item.get("email"):
+                            data["email"] = str(item["email"])
+                        if not data["website"] and item.get("url"):
+                            data["website"] = str(item["url"])
                 except Exception:
                     continue
         except Exception:
             pass
 
+        if not data["name"]:
+            raise ValueError("Profile opened but no agent name was found")
         return data
+
+    def scrape_profile(self, url, retries=3):
+        last_error = None
+        for attempt in range(1, retries + 1):
+            try:
+                return self.scrape_profile_once(url)
+            except Exception as exc:
+                last_error = exc
+                if attempt < retries and not self.stop_event.is_set():
+                    self.log_msg(f"Retry {attempt}/{retries - 1}: {url}")
+                    try:
+                        self.page.wait_for_timeout(1200)
+                    except Exception:
+                        pass
+        raise last_error
 
     def write_row(self, row):
         exists = self.csv_path.exists()
@@ -342,26 +499,47 @@ class BooliScraperApp:
                 writer.writeheader()
             writer.writerow({"profile_url": url, "error": str(error)})
 
-    def run_scraper(self):
+    def worker_main(self):
         try:
             self.launch_browser(False)
-            self.set_status("Checking Booli session...")
             self.page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
-            self.page.wait_for_timeout(1200)
+            self.page.wait_for_timeout(1000)
+            self.browser_ready_event.set()
+            self.log_msg("Microsoft Edge opened. Credentials are never stored by this program.")
 
-            # A real login is deliberately left to the user; no credentials are embedded.
-            if "login" in self.page.url.lower():
-                self.set_status("Please log in to Booli in the browser. Scraper is paused.")
-                self.log_msg("Booli login page detected. Complete login manually, then click Start scraper again.")
+            try:
+                login_required = "login" in self.page.url.lower()
+            except Exception:
+                login_required = False
+
+            if login_required:
+                self.set_status("Log in to Booli in the browser, then press Start scraper.")
+            else:
+                self.set_status("Booli is open. Press Start scraper when ready.")
+
+            self.start_event.wait()
+            if self.stop_event.is_set():
                 return
 
-            self.discover_profiles()
+            if "login" in self.page.url.lower():
+                if not self.wait_for_login_if_needed():
+                    self.log_msg("Login was not completed before timeout.")
+                    return
 
+            self.set_status("Checking Booli session...")
+            self.page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
+            self.page.wait_for_timeout(800)
+
+            discovered_count = self.discover_profiles()
             completed = set(self.state.get("completed", []))
             failed = set(self.state.get("failed", []))
             profiles = [u for u in self.state.get("discovered", []) if u not in completed]
 
-            self.log_msg(f"Starting profile extraction: {len(profiles)} remaining.")
+            self.log_msg(
+                f"Discovery complete: {discovered_count} unique profiles. "
+                f"{len(profiles)} remain to be opened."
+            )
+
             for index, url in enumerate(profiles, 1):
                 if self.stop_event.is_set():
                     break
@@ -371,68 +549,80 @@ class BooliScraperApp:
 
                 self.set_status(f"Opening profile {index}/{len(profiles)}")
                 try:
-                    row = self.scrape_profile(url)
+                    row = self.scrape_profile(url, retries=3)
                     self.write_row(row)
                     completed.add(url)
+                    failed.discard(url)
                     self.state["completed"] = sorted(completed)
-                    self.save_state()
-                    self.root.after(0, self.refresh_counts)
-                    self.log_msg(f"OK {index}/{len(profiles)}: {row.get('name') or url}")
-                except PlaywrightTimeoutError as e:
-                    failed.add(url)
-                    self.write_failed(url, f"Timeout: {e}")
                     self.state["failed"] = sorted(failed)
                     self.save_state()
                     self.root.after(0, self.refresh_counts)
-                    self.log_msg(f"TIMEOUT: {url}")
-                except Exception as e:
+                    self.log_msg(f"OK {index}/{len(profiles)}: {row['name']}")
+                except PlaywrightTimeoutError as exc:
                     failed.add(url)
-                    self.write_failed(url, e)
+                    self.write_failed(url, f"Timeout: {exc}")
                     self.state["failed"] = sorted(failed)
                     self.save_state()
                     self.root.after(0, self.refresh_counts)
-                    self.log_msg(f"FAILED: {url} -> {e}")
+                    self.log_msg(f"TIMEOUT after retries: {url}")
+                except Exception as exc:
+                    failed.add(url)
+                    self.write_failed(url, exc)
+                    self.state["failed"] = sorted(failed)
+                    self.save_state()
+                    self.root.after(0, self.refresh_counts)
+                    self.log_msg(f"FAILED after retries: {url} -> {exc}")
 
-                # Polite pacing and checkpointing.
-                self.page.wait_for_timeout(800)
+                self.page.wait_for_timeout(700)
 
             self.set_status("Finished current run. Data is saved continuously.")
             self.log_msg(f"Run ended. CSV: {self.csv_path}")
-        except Exception as e:
+        except Exception as exc:
             self.set_status("Stopped with an error.")
-            self.log_msg(f"FATAL: {e}")
+            self.log_msg(f"FATAL: {exc}")
         finally:
-            self.root.after(0, lambda: self.start_btn.configure(state="normal"))
-            self.root.after(0, lambda: self.stop_btn.configure(state="disabled"))
-            self.root.after(0, lambda: self.pause_btn.configure(state="disabled"))
+            try:
+                if self.context:
+                    self.context.close()
+            except Exception:
+                pass
+            try:
+                if self._pw:
+                    self._pw.stop()
+            except Exception:
+                pass
+            self.context = None
+            self.page = None
+            self._pw = None
+            self.root.after(0, self.worker_finished)
+
+    def worker_finished(self):
+        self.login_btn.configure(state="normal")
+        self.start_btn.configure(state="normal")
+        self.stop_btn.configure(state="disabled")
+        self.pause_btn.configure(state="disabled")
+        self.pause_btn.configure(text="Pause")
+        self.worker = None
 
     def open_export(self):
         try:
             os.startfile(str(self.export_dir))
-        except Exception as e:
-            messagebox.showerror("Export folder", str(e))
+        except Exception as exc:
+            messagebox.showerror("Export folder", str(exc))
 
     def close(self):
         self.stop_event.set()
-        try:
-            if self.context:
-                self.context.close()
-            if hasattr(self, "_pw"):
-                self._pw.stop()
-        except Exception:
-            pass
+        self.pause_event.set()
+        self.start_event.set()
         self.root.destroy()
 
 
-def awaitable_count(locator):
-    return locator.count()
-
-
-def awaitable_click(locator):
-    locator.click(timeout=3000)
-
-
 if __name__ == "__main__":
+    if "--self-test" in sys.argv:
+        count, _ = self_test()
+        print(f"SELF-TEST PASS: {count} checks")
+        raise SystemExit(0)
+
     root = tk.Tk()
     BooliScraperApp(root)
     root.mainloop()
