@@ -149,12 +149,21 @@ class BooliScraperApp:
 
         self.status = tk.StringVar(value="Ready")
         self.count = tk.StringVar(value="Found: 0   Completed: 0   Failed: 0")
+        self.email_var = tk.StringVar()
+        self.password_var = tk.StringVar()
 
         top = ttk.Frame(root, padding=12)
         top.pack(fill="x")
         ttk.Label(top, text="Booli Mäklarscraper", font=("Segoe UI", 18, "bold")).pack(anchor="w")
         ttk.Label(top, textvariable=self.status).pack(anchor="w", pady=(4, 0))
         ttk.Label(top, textvariable=self.count).pack(anchor="w")
+
+        creds = ttk.Frame(root, padding=(12, 4))
+        creds.pack(fill="x")
+        ttk.Label(creds, text="Booli email:").pack(side="left")
+        ttk.Entry(creds, textvariable=self.email_var, width=34).pack(side="left", padx=(6, 14))
+        ttk.Label(creds, text="Password:").pack(side="left")
+        ttk.Entry(creds, textvariable=self.password_var, width=24, show="*").pack(side="left", padx=6)
 
         buttons = ttk.Frame(root, padding=(12, 4))
         buttons.pack(fill="x")
@@ -290,6 +299,57 @@ class BooliScraperApp:
         self.start_event.set()
         self.set_status("Stopping after the current safe operation...")
         self.log_msg("Stop requested.")
+
+    def attempt_auto_login(self):
+        """Try ordinary Booli login with credentials entered for this run only."""
+        email = self.email_var.get().strip()
+        password = self.password_var.get()
+        if not email or not password:
+            return False
+        try:
+            if "login" not in self.page.url.lower():
+                return True
+            self.log_msg("Attempting Booli login with the credentials entered for this run...")
+            email_box = None
+            password_box = None
+            for selector in ['input[type="email"]', 'input[name="email"]', 'input[autocomplete="email"]']:
+                loc = self.page.locator(selector).first
+                if loc.count():
+                    email_box = loc
+                    break
+            for selector in ['input[type="password"]', 'input[name="password"]', 'input[autocomplete="current-password"]']:
+                loc = self.page.locator(selector).first
+                if loc.count():
+                    password_box = loc
+                    break
+            if not email_box or not password_box:
+                self.log_msg("Booli login form was not recognized; manual login is available.")
+                return False
+            email_box.fill(email)
+            password_box.fill(password)
+            buttons = self.page.locator('button, input[type="submit"]')
+            clicked = False
+            for i in range(min(buttons.count(), 20)):
+                b = buttons.nth(i)
+                try:
+                    label = (b.inner_text() or b.get_attribute("value") or "").strip().lower()
+                    if any(x in label for x in ("logga in", "login", "sign in")):
+                        b.click(timeout=5000)
+                        clicked = True
+                        break
+                except Exception:
+                    continue
+            if not clicked:
+                password_box.press("Enter")
+            self.page.wait_for_timeout(2500)
+            if "login" not in self.page.url.lower():
+                self.log_msg("Booli login completed.")
+                return True
+            self.log_msg("Booli still shows the login page. Complete login manually if required.")
+            return False
+        except Exception as exc:
+            self.log_msg(f"Automatic login could not be completed: {exc}")
+            return False
 
     def wait_for_login_if_needed(self):
         deadline = time.time() + 600
@@ -519,7 +579,7 @@ class BooliScraperApp:
             self.page.goto(BASE_URL, wait_until="domcontentloaded", timeout=60000)
             self.page.wait_for_timeout(1000)
             self.browser_ready_event.set()
-            self.log_msg("Microsoft Edge opened. Credentials are never stored by this program.")
+            self.log_msg("Microsoft Edge opened. Credentials entered here are used only for this run and are not written to disk.")
 
             try:
                 login_required = "login" in self.page.url.lower()
@@ -527,7 +587,14 @@ class BooliScraperApp:
                 login_required = False
 
             if login_required:
-                self.set_status("Log in to Booli in the browser, then press Start scraper.")
+                self.set_status("Logging in to Booli...")
+                self.attempt_auto_login()
+                try:
+                    login_required = "login" in self.page.url.lower()
+                except Exception:
+                    login_required = True
+                if login_required:
+                    self.set_status("Log in to Booli in the browser, then press Start scraper.")
             else:
                 self.set_status("Booli is open. Press Start scraper when ready.")
 
