@@ -2,6 +2,7 @@ import argparse
 import csv
 import getpass
 import os
+import shutil
 import re
 import sys
 import time
@@ -81,13 +82,72 @@ def make_driver(headless=False):
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
     )
 
-    # Dedicated Chrome profile: the normal Booli login/security session survives
-    # between runs without touching the user's normal Chrome profile.
-    profile_root = Path(os.getenv("LOCALAPPDATA", str(Path.home()))) / "BooliMaklarScraper" / "browser_profile"
-    profile_root.mkdir(parents=True, exist_ok=True)
-    options.add_argument(f"--user-data-dir={profile_root}")
+    # The existing Booli profile may already be open in Chrome. Launching
+    # another Chrome process against the same user-data-dir can crash with
+    # "DevToolsActivePort file doesn't exist". Make a local profile snapshot
+    # first, preserving the existing login cookies while avoiding the lock.
+    source_profile = Path(
+        os.getenv("LOCALAPPDATA", str(Path.home()))
+    ) / "BooliMaklarScraper" / "browser_profile"
+    run_profile = Path(
+        os.getenv("LOCALAPPDATA", str(Path.home()))
+    ) / "MaklarScraper_v2" / "BooliRunProfile"
+    run_profile.mkdir(parents=True, exist_ok=True)
 
-    driver = webdriver.Chrome(options=options)
+    if source_profile.exists():
+        ignore_names = shutil.ignore_patterns(
+            "SingletonLock",
+            "SingletonCookie",
+            "SingletonSocket",
+            "LOCK",
+            "DevToolsActivePort",
+        )
+        try:
+            # Refresh the run profile from the existing Booli profile while
+            # intentionally leaving Chrome's singleton/lock files behind.
+            for child in run_profile.iterdir():
+                if child.name in {"SingletonLock", "SingletonCookie", "SingletonSocket", "LOCK", "DevToolsActivePort"}:
+                    try:
+                        child.unlink()
+                    except Exception:
+                        pass
+            shutil.copytree(
+                source_profile,
+                run_profile,
+                dirs_exist_ok=True,
+                ignore=ignore_names,
+            )
+            print(
+                f"[BOOLI] Existing Booli profile copied to: {run_profile}",
+                flush=True,
+            )
+        except Exception as exc:
+            print(
+                f"[BOOLI] Profile snapshot warning: {exc}. Using the previous run profile.",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    options.add_argument(f"--user-data-dir={run_profile}")
+    options.add_argument("--no-first-run")
+    options.add_argument("--no-default-browser-check")
+    options.add_argument("--disable-background-networking")
+
+    try:
+        driver = webdriver.Chrome(options=options)
+    except Exception as exc:
+        print(
+            "[CHROME] Chrome could not start with the Booli profile.",
+            file=sys.stderr,
+            flush=True,
+        )
+        print(
+            "[CHROME] Close the Booli Chrome window if it is open and run the program again.",
+            file=sys.stderr,
+            flush=True,
+        )
+        print(f"[CHROME] {exc}", file=sys.stderr, flush=True)
+        raise
     try:
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
