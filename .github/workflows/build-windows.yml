@@ -46,6 +46,18 @@ jobs:
           & $exe --self-test
           if ($LASTEXITCODE -ne 0) { throw "Packaged EXE self-test failed with exit code $LASTEXITCODE" }
 
+      - name: GUI startup smoke test
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "dist\Booli_MaklarScraper.exe").Path
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 8
+          if ($p.HasExited) {
+            throw "GUI EXE exited during startup. ExitCode=$($p.ExitCode)"
+          }
+          Stop-Process -Id $p.Id -Force
+          Write-Host "GUI startup smoke test passed."
+
       - name: Package
         shell: pwsh
         run: |
