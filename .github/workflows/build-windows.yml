@@ -18,19 +18,25 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: python -m pip install --upgrade pip -r requirements.txt pyinstaller
+      - name: Python syntax check
+        run: python -m py_compile booli_scraper.py
       - name: Build EXE
         run: pyinstaller --noconfirm --clean --onefile --windowed --name Booli_MaklarScraper --collect-all playwright booli_scraper.py
-      - name: Smoke test
+      - name: Verify EXE
         shell: pwsh
         run: |
-          if (-not (Test-Path "dist\\Booli_MaklarScraper.exe")) { throw "EXE was not created" }
+          $exe = "dist\Booli_MaklarScraper.exe"
+          if (-not (Test-Path $exe)) { throw "EXE was not created" }
+          $size = (Get-Item $exe).Length
+          if ($size -lt 1000000) { throw "EXE is unexpectedly small: $size bytes" }
+          Write-Host "EXE verified: $size bytes"
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
-          Copy-Item "dist\\Booli_MaklarScraper.exe" "package\\Booli_MaklarScraper.exe"
-          Copy-Item "README.md" "package\\README.md"
-          Compress-Archive -Path "package\\*" -DestinationPath "Booli_MaklarScraper_Windows.zip" -Force
+          Copy-Item "dist\Booli_MaklarScraper.exe" "package\Booli_MaklarScraper.exe"
+          Copy-Item "README.md" "package\README.md"
+          Compress-Archive -Path "package\*" -DestinationPath "Booli_MaklarScraper_Windows.zip" -Force
       - uses: actions/upload-artifact@v4
         with:
           name: Booli_MaklarScraper_Windows
