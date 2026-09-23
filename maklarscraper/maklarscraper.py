@@ -1,11 +1,14 @@
 import argparse
 import csv
+import getpass
+import os
 import re
 import sys
 import time
 import html as html_lib
 from urllib.request import Request, urlopen
 from datetime import date
+from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from selenium import webdriver
@@ -73,7 +76,17 @@ def make_driver(headless=False):
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-popup-blocking")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36")
+    options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    )
+
+    # Dedicated Chrome profile: the normal Booli login/security session survives
+    # between runs without touching the user's normal Chrome profile.
+    profile_root = Path(os.getenv("LOCALAPPDATA", str(Path.home()))) / "MaklarScraper_v2" / "ChromeProfile"
+    profile_root.mkdir(parents=True, exist_ok=True)
+    options.add_argument(f"--user-data-dir={profile_root}")
+
     driver = webdriver.Chrome(options=options)
     try:
         driver.execute_cdp_cmd(
@@ -83,6 +96,171 @@ def make_driver(headless=False):
     except Exception:
         pass
     return driver
+
+
+BOOLI_SECURITY_MARKERS = (
+    "säkerhetsverifiering",
+    "säkerhetstjänst",
+    "verifierar att du inte är någon robot",
+    "verify you are human",
+    "checking your browser",
+    "just a moment",
+    "challenge",
+)
+
+
+def _page_text(driver):
+    try:
+        return clean(driver.find_element(By.TAG_NAME, "body").text).casefold()
+    except Exception:
+        return ""
+
+
+def _is_booli_security_page(driver):
+    text = _page_text(driver)
+    return any(marker in text for marker in BOOLI_SECURITY_MARKERS)
+
+
+def _has_booli_login_form(driver):
+    try:
+        email_present = bool(
+            driver.find_elements(By.CSS_SELECTOR, 'input[type="email"]')
+            or driver.find_elements(By.CSS_SELECTOR, 'input[name="email"]')
+            or driver.find_elements(By.CSS_SELECTOR, 'input[autocomplete="email"]')
+        )
+        password_present = bool(
+            driver.find_elements(By.CSS_SELECTOR, 'input[type="password"]')
+            or driver.find_elements(By.CSS_SELECTOR, 'input[name="password"]')
+            or driver.find_elements(By.CSS_SELECTOR, 'input[autocomplete="current-password"]')
+        )
+        return email_present and password_present
+    except Exception:
+        return False
+
+
+def _looks_like_booli_directory(driver):
+    text = _page_text(driver)
+    if "sök mäklare i hela sverige" in text or "jämför mäklare i sverige" in text:
+        return True
+    try:
+        for a in driver.find_elements(By.CSS_SELECTOR, 'a[href*="/maklare/"]'):
+            href = a.get_attribute("href") or ""
+            if is_booli_profile_url(href):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def is_booli_profile_url(url):
+    cleaned = url.split("?", 1)[0].split("#", 1)[0].rstrip("/")
+    return bool(
+        re.match(r"^https?://(?:www\.)?booli\.se/maklare/[^/?#]+$", cleaned, re.I)
+    )
+
+
+def wait_for_booli_access(driver, headless=False, timeout=900):
+    """
+    Uses the normal Booli login flow. If Booli displays its security verification,
+    leave the browser alone and wait for the user to complete it; never reload
+    the page during the verification.
+    """
+    started = time.time()
+    login_attempted = False
+    email = os.getenv("BOOLI_EMAIL", "").strip()
+    password = os.getenv("BOOLI_PASSWORD", "")
+
+    while time.time() - started < timeout:
+        if _looks_like_booli_directory(driver):
+            return True
+
+        if _is_booli_security_page(driver):
+            if headless:
+                raise RuntimeError(
+                    "Booli visar säkerhetsverifiering i headless-läge. "
+                    "Kör utan --headless första gången och slutför kontrollen i Chrome."
+                )
+            print(
+                "[BOOLI] Säkerhetsverifiering visas. Slutför den i Chrome. "
+                "Sidan laddas inte om under kontrollen.",
+                flush=True,
+            )
+            time.sleep(2)
+            continue
+
+        if _has_booli_login_form(driver):
+            if headless:
+                raise RuntimeError(
+                    "Booli kräver inloggning. Kör utan --headless första gången och logga in i Chrome."
+                )
+
+            if not login_attempted:
+                login_attempted = True
+                if not email:
+                    email = input("Booli e-post: ").strip()
+                if not password:
+                    password = getpass.getpass("Booli lösenord: ")
+
+                try:
+                    email_box = next(
+                        (x for x in (
+                            driver.find_elements(By.CSS_SELECTOR, 'input[type="email"]'),
+                            driver.find_elements(By.CSS_SELECTOR, 'input[name="email"]'),
+                            driver.find_elements(By.CSS_SELECTOR, 'input[autocomplete="email"]'),
+                        ) if x),
+                        None,
+                    )
+                    password_box = next(
+                        (x for x in (
+                            driver.find_elements(By.CSS_SELECTOR, 'input[type="password"]'),
+                            driver.find_elements(By.CSS_SELECTOR, 'input[name="password"]'),
+                            driver.find_elements(By.CSS_SELECTOR, 'input[autocomplete="current-password"]'),
+                        ) if x),
+                        None,
+                    )
+
+                    if not email_box or not password_box:
+                        raise RuntimeError("Booli login form was not recognized.")
+
+                    email_box[0].clear()
+                    email_box[0].send_keys(email)
+                    password_box[0].clear()
+                    password_box[0].send_keys(password)
+
+                    clicked = False
+                    for button in driver.find_elements(By.CSS_SELECTOR, "button, input[type='submit']")[:20]:
+                        try:
+                            label = clean(button.text or button.get_attribute("value") or "").casefold()
+                            if any(word in label for word in ("logga in", "login", "sign in")):
+                                button.click()
+                                clicked = True
+                                break
+                        except Exception:
+                            continue
+                    if not clicked:
+                        password_box[0].send_keys("\n")
+
+                    print(
+                        "[BOOLI] Login skickad. Väntar på Booli...",
+                        flush=True,
+                    )
+                except Exception as exc:
+                    print(
+                        f"[BOOLI] Automatisk login kunde inte slutföras: {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    print(
+                        "[BOOLI] Slutför login manuellt i Chrome-fönstret.",
+                        flush=True,
+                    )
+
+            time.sleep(2)
+            continue
+
+        time.sleep(1)
+
+    raise TimeoutError("Booli blev inte klar med login/säkerhetskontroll inom 15 minuter.")
 
 
 def page_signature(driver):
@@ -241,7 +419,7 @@ def next_page_url(driver, current_url, source):
     return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, urlencode(qs, doseq=True), ""))
 
 
-def collect_all_profile_links(driver, source, max_pages=1000, smoke=False):
+def collect_all_profile_links(driver, source, max_pages=1000, smoke=False, headless=False):
     cfg = SOURCE_CONFIG[source]
     current = cfg["start"]
     seen_pages = set()
@@ -253,6 +431,8 @@ def collect_all_profile_links(driver, source, max_pages=1000, smoke=False):
         seen_pages.add(current)
         print(f"[{source.upper()}] LIST {page_no}: {current}", flush=True)
         driver.get(current)
+        if source == "booli":
+            wait_for_booli_access(driver, headless=headless)
         wait_page(driver)
         time.sleep(2.0)
         try:
@@ -442,8 +622,10 @@ def make_row(source, name, company, url, emails, phones, postal="", city="", sou
     }
 
 
-def parse_profile(driver, source, url):
+def parse_profile(driver, source, url, headless=False):
     driver.get(url)
+    if source == "booli":
+        wait_for_booli_access(driver, headless=headless)
     wait_page(driver)
     time.sleep(0.35)
     if source == "booli":
@@ -510,7 +692,13 @@ def scrape_sources(sources, headless=False, max_pages=1000, max_profiles=0, smok
     try:
         for source in sources:
             print(f"[SOURCE] {source}", flush=True)
-            links = collect_all_profile_links(driver, source, max_pages=max_pages, smoke=smoke)
+            links = collect_all_profile_links(
+                driver,
+                source,
+                max_pages=max_pages,
+                smoke=smoke,
+                headless=headless,
+            )
             if max_profiles:
                 links = links[:max_profiles]
             source_counts[source] = len(links)
@@ -518,7 +706,7 @@ def scrape_sources(sources, headless=False, max_pages=1000, max_profiles=0, smok
 
             for i, url in enumerate(links, 1):
                 try:
-                    row = parse_profile(driver, source, url)
+                    row = parse_profile(driver, source, url, headless=headless)
                     if not row["name"]:
                         raise RuntimeError("profile page has no name heading")
                     all_rows.append(row)
