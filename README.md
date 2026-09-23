@@ -1,5 +1,7 @@
 # Booli Mäklarscraper
 
+Build verification cycle: 2026-09-23.
+
 Real Windows scraper for Booli's Swedish agent directory.
 
 - Opens a real browser with a persistent local profile.
