@@ -5,6 +5,7 @@ on:
     paths:
       - "booli_scraper.py"
       - "requirements.txt"
+      - "README.md"
       - ".github/workflows/build-windows.yml"
   workflow_dispatch:
 
@@ -16,12 +17,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - name: Install dependencies
         run: python -m pip install --upgrade pip -r requirements.txt pyinstaller
+
       - name: Python syntax check
         run: python -m py_compile booli_scraper.py
+
+      - name: Python self-test
+        run: python booli_scraper.py --self-test
+
       - name: Build EXE
         run: pyinstaller --noconfirm --clean --onefile --windowed --name Booli_MaklarScraper --collect-all playwright booli_scraper.py
+
       - name: Verify EXE
         shell: pwsh
         run: |
@@ -30,14 +38,30 @@ jobs:
           $size = (Get-Item $exe).Length
           if ($size -lt 1000000) { throw "EXE is unexpectedly small: $size bytes" }
           Write-Host "EXE verified: $size bytes"
+
+      - name: EXE runtime self-test
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "dist\Booli_MaklarScraper.exe").Path
+          & $exe --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Packaged EXE self-test failed with exit code $LASTEXITCODE" }
+
       - name: Package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item "dist\Booli_MaklarScraper.exe" "package\Booli_MaklarScraper.exe"
           Copy-Item "README.md" "package\README.md"
-          Compress-Archive -Path "package\*" -DestinationPath "Booli_MaklarScraper_Windows.zip" -Force
+          @'
+          @echo off
+          start "" "%~dp0Booli_MaklarScraper.exe"
+          '@ | Set-Content -Encoding ASCII "package\Start_Booli_MaklarScraper.bat"
+
+          if (-not (Test-Path "package\Booli_MaklarScraper.exe")) { throw "Package EXE missing" }
+          if (-not (Test-Path "package\README.md")) { throw "Package README missing" }
+          if (-not (Test-Path "package\Start_Booli_MaklarScraper.bat")) { throw "Package BAT missing" }
+
       - uses: actions/upload-artifact@v4
         with:
           name: Booli_MaklarScraper_Windows
-          path: Booli_MaklarScraper_Windows.zip
+          path: package
