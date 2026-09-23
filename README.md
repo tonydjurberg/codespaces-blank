@@ -1,22 +1,14 @@
-# MäklarScraper Google Maps
+# Booli Mäklarscraper
 
-Windows desktop tool for finding real-estate businesses using Google Maps Platform Places API (New).
+Real Windows scraper for Booli's Swedish agent directory.
 
-Features:
-- Search by city/area and category
-- Optional second query
-- Deduplicate by Google Place ID
-- Collect name, address, phone, website, Maps URL, status, Place ID and coordinates
-- CSV export
-- Stop button
-- No browser automation or CAPTCHA bypass
+- Opens a real browser with a persistent local profile.
+- User logs in manually; credentials are not stored in the program.
+- Collects individual /maklare/... profile URLs.
+- Opens each individual profile and extracts profile-level data.
+- Saves continuously to booli_maklare.csv.
+- Resumes using state.json.
+- Failed profiles are written to failed_profiles.csv.
+- Does not bypass CAPTCHA/security challenges.
 
-Setup:
-1. Enable Google Maps Platform Places API (New) and create an API key.
-2. Run the Windows EXE.
-3. Enter the API key.
-4. Enter a city such as Malmö.
-5. Search for mäklare and optionally fastighetsmäklare.
-6. Export CSV.
-
-Google documentation: https://developers.google.com/maps/documentation/places/web-service
+The Windows build is produced by GitHub Actions. The EXE uses installed Microsoft Edge when available.
