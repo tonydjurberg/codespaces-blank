@@ -27,24 +27,29 @@ jobs:
       - name: Python self-test
         run: python booli_scraper.py --self-test
 
-      - name: Build EXE
+      - name: Build GUI EXE
         run: pyinstaller --noconfirm --clean --onefile --windowed --name Booli_MaklarScraper --collect-all playwright booli_scraper.py
 
-      - name: Verify EXE
-        shell: pwsh
-        run: |
-          $exe = "dist\Booli_MaklarScraper.exe"
-          if (-not (Test-Path $exe)) { throw "EXE was not created" }
-          $size = (Get-Item $exe).Length
-          if ($size -lt 1000000) { throw "EXE is unexpectedly small: $size bytes" }
-          Write-Host "EXE verified: $size bytes"
+      - name: Build DEBUG EXE
+        run: pyinstaller --noconfirm --clean --onefile --console --name Booli_MaklarScraper_DEBUG --collect-all playwright booli_scraper.py
 
-      - name: EXE runtime self-test
+      - name: Verify EXEs
         shell: pwsh
         run: |
-          $exe = (Resolve-Path "dist\Booli_MaklarScraper.exe").Path
+          foreach ($name in @("Booli_MaklarScraper.exe","Booli_MaklarScraper_DEBUG.exe")) {
+            $exe = "dist\$name"
+            if (-not (Test-Path $exe)) { throw "$name was not created" }
+            $size = (Get-Item $exe).Length
+            if ($size -lt 1000000) { throw "$name is unexpectedly small: $size bytes" }
+            Write-Host "$name verified: $size bytes"
+          }
+
+      - name: DEBUG EXE runtime self-test
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path "dist\Booli_MaklarScraper_DEBUG.exe").Path
           & $exe --self-test
-          if ($LASTEXITCODE -ne 0) { throw "Packaged EXE self-test failed with exit code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "DEBUG EXE self-test failed with exit code $LASTEXITCODE" }
 
       - name: GUI startup smoke test
         shell: pwsh
@@ -63,15 +68,23 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item "dist\Booli_MaklarScraper.exe" "package\Booli_MaklarScraper.exe"
+          Copy-Item "dist\Booli_MaklarScraper_DEBUG.exe" "package\Booli_MaklarScraper_DEBUG.exe"
           Copy-Item "README.md" "package\README.md"
           @'
           @echo off
           start "" "%~dp0Booli_MaklarScraper.exe"
           '@ | Set-Content -Encoding ASCII "package\Start_Booli_MaklarScraper.bat"
+          @'
+          @echo off
+          "%~dp0Booli_MaklarScraper_DEBUG.exe"
+          pause
+          '@ | Set-Content -Encoding ASCII "package\Start_DEBUG.bat"
 
-          if (-not (Test-Path "package\Booli_MaklarScraper.exe")) { throw "Package EXE missing" }
+          if (-not (Test-Path "package\Booli_MaklarScraper.exe")) { throw "Package GUI EXE missing" }
+          if (-not (Test-Path "package\Booli_MaklarScraper_DEBUG.exe")) { throw "Package DEBUG EXE missing" }
           if (-not (Test-Path "package\README.md")) { throw "Package README missing" }
-          if (-not (Test-Path "package\Start_Booli_MaklarScraper.bat")) { throw "Package BAT missing" }
+          if (-not (Test-Path "package\Start_Booli_MaklarScraper.bat")) { throw "Package GUI BAT missing" }
+          if (-not (Test-Path "package\Start_DEBUG.bat")) { throw "Package DEBUG BAT missing" }
 
       - uses: actions/upload-artifact@v4
         with:
