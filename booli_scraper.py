@@ -5,6 +5,7 @@ import re
 import sys
 import threading
 import time
+import traceback
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -225,13 +226,26 @@ class BooliScraperApp:
                 pass
         if self._pw is None:
             self._pw = sync_playwright().start()
-        self.context = self._pw.chromium.launch_persistent_context(
-            str(self.profile_dir),
-            channel="msedge",
-            headless=headless,
-            viewport={"width": 1440, "height": 1000},
-            accept_downloads=True,
-        )
+        last_error = None
+        for channel in ("msedge", "chrome"):
+            try:
+                self.context = self._pw.chromium.launch_persistent_context(
+                    str(self.profile_dir),
+                    channel=channel,
+                    headless=headless,
+                    viewport={"width": 1440, "height": 1000},
+                    accept_downloads=True,
+                )
+                self.log_msg(f"Browser started using {channel}.")
+                break
+            except Exception as exc:
+                last_error = exc
+                self.log_msg(f"Could not start {channel}: {exc}")
+        if self.context is None:
+            raise RuntimeError(
+                "Could not start Microsoft Edge or Google Chrome. Install Edge or Chrome, then restart. "
+                f"Last error: {last_error}"
+            )
         self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
 
     def open_login(self):
@@ -617,12 +631,33 @@ class BooliScraperApp:
         self.root.destroy()
 
 
+def write_fatal_log(exc):
+    data_dir = Path(os.getenv("LOCALAPPDATA", Path.home())) / "BooliMaklarScraper"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    log_path = data_dir / "crash.log"
+    log_path.write_text(
+        time.strftime("%Y-%m-%d %H:%M:%S") + "\n" + traceback.format_exc(),
+        encoding="utf-8",
+    )
+    return log_path
+
+
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
         count, _ = self_test()
         print(f"SELF-TEST PASS: {count} checks")
         raise SystemExit(0)
 
-    root = tk.Tk()
-    BooliScraperApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        BooliScraperApp(root)
+        root.mainloop()
+    except Exception as exc:
+        log_path = write_fatal_log(exc)
+        try:
+            messagebox.showerror(
+                "Booli Mäklarscraper – startup error",
+                f"Programmet kunde inte starta.\n\n{exc}\n\nFelloggen finns här:\n{log_path}",
+            )
+        except Exception:
+            pass
