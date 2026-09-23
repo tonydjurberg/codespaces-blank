@@ -1,0 +1,1 @@
+Real Booli scraper with persistent browser login, directory discovery, individual profile extraction, checkpointing and CSV output.
